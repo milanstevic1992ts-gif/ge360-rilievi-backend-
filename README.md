@@ -78,7 +78,7 @@ http://127.0.0.1:9888/setup/
 
 Configurazione predefinita: `wg0`, rete `10.88.0.0/24`, server `10.88.0.1`, WireGuard UDP `51820`, backend `10.88.0.1:9888`. Il QR dispositivo è one-shot e la private key Android non viene persistita dal backend.
 
-Dati e chiavi restano fuori da Git in `/etc/ge360/direct-bridge`, `/var/lib/ge360/direct-bridge` e `/etc/wireguard/wg0.conf`.
+Dati e chiavi restano fuori da Git in `/etc/ge360/direct-bridge` e `/var/lib/ge360/direct-bridge`; `/etc/wireguard/wg0.conf` è soltanto il symlink usato da `wg-quick`.
 
 Dettagli completi, Android, CGNAT, test e rollback: `docs/direct-bridge.md`.
 

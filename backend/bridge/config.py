@@ -53,7 +53,7 @@ class BridgeSettings:
             raise ValueError("GE360_BRIDGE_KEEPALIVE is invalid")
         config_dir = Path(os.getenv("GE360_BRIDGE_CONFIG_DIR", "/etc/ge360/direct-bridge"))
         state_dir = Path(os.getenv("GE360_BRIDGE_STATE_DIR", "/var/lib/ge360/direct-bridge"))
-        wg_config = Path(os.getenv("GE360_BRIDGE_WG_CONFIG", f"/etc/wireguard/{interface}.conf"))
+        wg_config = Path(os.getenv("GE360_BRIDGE_WG_CONFIG", str(config_dir / f"{interface}.conf")))
         public_host = os.getenv("GE360_PUBLIC_HOST", "").strip() or None
         return cls(
             enabled=_bool("GE360_BRIDGE_ENABLED", True),

@@ -24,7 +24,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables miniu
 getent group "$GROUP_NAME" >/dev/null || groupadd --system "$GROUP_NAME"
 usermod -a -G "$GROUP_NAME" "$SERVICE_USER"
 
-install -d -m 0750 -o root -g "$GROUP_NAME" "$CONFIG_DIR" /etc/wireguard
+install -d -m 0770 -o root -g "$GROUP_NAME" "$CONFIG_DIR"
+mkdir -p /etc/wireguard
 install -d -m 0770 -o root -g "$GROUP_NAME" "$STATE_DIR" "$STATE_DIR/backups" "$STATE_DIR/qr" "$STATE_DIR/state"
 
 if [[ ! -f "$ENV_FILE" ]]; then
@@ -38,7 +39,7 @@ GE360_BRIDGE_KEEPALIVE=25
 GE360_PUBLIC_HOST=
 GE360_BRIDGE_CONFIG_DIR=/etc/ge360/direct-bridge
 GE360_BRIDGE_STATE_DIR=/var/lib/ge360/direct-bridge
-GE360_BRIDGE_WG_CONFIG=/etc/wireguard/wg0.conf
+GE360_BRIDGE_WG_CONFIG=/etc/ge360/direct-bridge/wg0.conf
 GE360_BRIDGE_AUTO_PORT_MAPPING=false
 EOF
   chown root:"$GROUP_NAME" "$ENV_FILE"
@@ -56,15 +57,30 @@ WG_IFACE="${GE360_BRIDGE_INTERFACE:-wg0}"
 WG_NETWORK="${GE360_BRIDGE_NETWORK:-10.88.0.0/24}"
 WG_SERVER_IP="${GE360_BRIDGE_SERVER_IP:-10.88.0.1}"
 WG_PORT="${GE360_BRIDGE_PORT:-51820}"
-WG_CONFIG="${GE360_BRIDGE_WG_CONFIG:-/etc/wireguard/${WG_IFACE}.conf}"
+WG_CONFIG="${GE360_BRIDGE_WG_CONFIG:-$CONFIG_DIR/${WG_IFACE}.conf}"
+SYSTEM_WG_CONFIG="/etc/wireguard/${WG_IFACE}.conf"
 PRIVATE_KEY="$CONFIG_DIR/server.key"
 PUBLIC_KEY="$CONFIG_DIR/server.pub"
 
 [[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || { echo "Invalid WireGuard interface: $WG_IFACE"; exit 1; }
 
+if [[ -e "$SYSTEM_WG_CONFIG" || -L "$SYSTEM_WG_CONFIG" ]]; then
+  system_target="$(readlink -f "$SYSTEM_WG_CONFIG" 2>/dev/null || true)"
+  managed_target="$(readlink -m "$WG_CONFIG")"
+  if [[ "$system_target" != "$managed_target" ]]; then
+    if [[ -f "$SYSTEM_WG_CONFIG" ]] && grep -Fq "$MARKER" "$SYSTEM_WG_CONFIG" && [[ ! -e "$WG_CONFIG" ]]; then
+      mv "$SYSTEM_WG_CONFIG" "$WG_CONFIG"
+      echo "Migrated existing GE360-managed WireGuard config to $WG_CONFIG."
+    else
+      echo "Refusing to replace unmanaged WireGuard entry: $SYSTEM_WG_CONFIG"
+      echo "Use another GE360_BRIDGE_INTERFACE or migrate that interface manually."
+      exit 1
+    fi
+  fi
+fi
+
 if [[ -f "$WG_CONFIG" ]] && ! grep -Fq "$MARKER" "$WG_CONFIG"; then
   echo "Refusing to overwrite unmanaged WireGuard config: $WG_CONFIG"
-  echo "Use another GE360_BRIDGE_INTERFACE or migrate that interface manually."
   exit 1
 fi
 
@@ -101,10 +117,19 @@ Address = $WG_SERVER_IP/${WG_NETWORK#*/}
 ListenPort = $WG_PORT
 PrivateKey = $private
 EOF
-  chown root:"$GROUP_NAME" "$WG_CONFIG"
-  chmod 0640 "$WG_CONFIG"
 else
   echo "Existing managed $WG_CONFIG preserved."
+fi
+chown root:"$GROUP_NAME" "$WG_CONFIG"
+chmod 0660 "$WG_CONFIG"
+
+if [[ -L "$SYSTEM_WG_CONFIG" ]]; then
+  [[ "$(readlink -f "$SYSTEM_WG_CONFIG")" == "$(readlink -m "$WG_CONFIG")" ]] || { echo "Unexpected WireGuard symlink target: $SYSTEM_WG_CONFIG"; exit 1; }
+elif [[ -e "$SYSTEM_WG_CONFIG" ]]; then
+  echo "Unexpected WireGuard file remains at $SYSTEM_WG_CONFIG"
+  exit 1
+else
+  ln -s "$WG_CONFIG" "$SYSTEM_WG_CONFIG"
 fi
 
 install -m 0755 "$APP_DIR/scripts/direct-bridge-firewall.sh" /usr/local/sbin/ge360-direct-bridge-firewall
@@ -138,7 +163,7 @@ EnvironmentFile=-$ENV_FILE
 SupplementaryGroups=$GROUP_NAME
 AmbientCapabilities=CAP_NET_ADMIN
 CapabilityBoundingSet=CAP_NET_ADMIN
-ReadWritePaths=$CONFIG_DIR $STATE_DIR /etc/wireguard
+ReadWritePaths=$CONFIG_DIR $STATE_DIR
 ExecStart=
 ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 9888
 EOF
