@@ -13,6 +13,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agent.notes import rewrite_note
 from backend.agent.ollama import OllamaClient
+from backend.ai import AIAuditLog, AICADMemory, CADPlanner, CADPlannerRequest, CandidateService, OllamaProvider, PlanContext, REGISTRY
 
 from backend.config import get_settings
 from backend.db import Database
@@ -27,13 +28,16 @@ storage = PlanStorage(settings.data_dir)
 db = Database(settings.db_path)
 pipeline = Pipeline(settings, storage, db)
 jobs = JobManager(pipeline, max_workers=settings.job_workers)
+ai_audit = AIAuditLog(storage)
+ai_memory = AICADMemory(settings.data_dir / "ai-cad-memory.sqlite3", enabled=settings.ai_memory_enabled)
+candidates = CandidateService(settings, storage, db, ai_audit, ai_memory)
 
 if not settings.api_key:
     logger.warning("GE360_API_KEY is empty: local/development API is running without authentication")
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
-app = FastAPI(title="GE360 Rilievi Backend", version="1.2.0")
+app = FastAPI(title="GE360 Rilievi Backend", version="1.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -144,7 +148,7 @@ def health():
     return {
         "ok": True,
         "service": "ge360-rilievi-backend",
-        "version": "1.2.0",
+        "version": "1.4.0",
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(settings.api_key),
     }
@@ -214,6 +218,107 @@ def job_status(job_id: str):
         raise HTTPException(status_code=404, detail="Job not found")
     return result
 
+
+
+def _ollama_provider():
+    return OllamaProvider(settings.ai_base_url, settings.ai_model, settings.ai_timeout_seconds)
+
+@app.get("/api/v1/ai/status", dependencies=[Depends(require_api_key)])
+def ai_status():
+    h = _ollama_provider().healthcheck()
+    return {
+        "enabled": settings.ai_enabled,
+        "provider": settings.ai_provider,
+        "model": settings.ai_model,
+        "reachable": h.reachable,
+        "detail": h.detail,
+        "tools_enabled": settings.ai_enabled,
+        "tool_count": len(REGISTRY.names),
+        "geometry_engine": "ge360",
+        "authoritative": False,
+        "best_effort": settings.ai_best_effort,
+        "fallback_available": True,
+        "critic_enabled": settings.ai_critic_enabled,
+        "memory_enabled": settings.ai_memory_enabled,
+        "max_strategies": settings.ai_max_strategies,
+    }
+
+@app.post("/api/v1/plans/{plan_id}/ai/plan", dependencies=[Depends(require_api_key)])
+def ai_plan(plan_id: str, payload: CADPlannerRequest):
+    _record_or_404(plan_id)
+    if not settings.ai_enabled:
+        raise HTTPException(status_code=503, detail="GE360 AI disabled")
+    try:
+        context = PlanContext(storage, plan_id)
+        planner = CADPlanner(
+            _ollama_provider(),
+            ai_audit,
+            settings.ai_max_tool_rounds,
+            memory=ai_memory,
+            critic_enabled=settings.ai_critic_enabled,
+            best_effort=settings.ai_best_effort,
+        )
+        result = planner.plan(context, payload)
+        response = {"planner": result.model_dump(mode="json"), "candidate": None}
+        if result.status == "ready" and result.command is not None and payload.auto_preview:
+            response["candidate"] = candidates.prepare(plan_id, result.command, payload.instruction).model_dump(mode="json")
+        return response
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc)) from exc
+
+@app.get("/api/v1/plans/{plan_id}/ai/candidates/{candidate_id}", dependencies=[Depends(require_api_key)])
+def ai_candidate(plan_id: str, candidate_id: str):
+    _record_or_404(plan_id)
+    try:
+        return candidates.load_candidate(plan_id, candidate_id)[1]
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+@app.get("/api/v1/plans/{plan_id}/ai/candidates/{candidate_id}/preview", dependencies=[Depends(require_api_key)])
+def ai_candidate_preview(plan_id: str, candidate_id: str):
+    _record_or_404(plan_id)
+    try:
+        root, _ = candidates.load_candidate(plan_id, candidate_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    path = root / "preview.png"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="candidate preview unavailable")
+    return FileResponse(path, media_type="image/png")
+
+class ApplyCandidateRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    force: bool = False
+
+@app.post("/api/v1/plans/{plan_id}/ai/candidates/{candidate_id}/apply", dependencies=[Depends(require_api_key)])
+def ai_apply(plan_id: str, candidate_id: str, payload: ApplyCandidateRequest | None = None):
+    _record_or_404(plan_id)
+    try:
+        return candidates.apply(plan_id, candidate_id, force=payload.force if payload else False)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+class VersionStepRequest(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+    steps: int = Field(default=1, ge=1, le=20)
+
+@app.post("/api/v1/plans/{plan_id}/undo", dependencies=[Depends(require_api_key)])
+def undo(plan_id: str, payload: VersionStepRequest | None = None):
+    _record_or_404(plan_id)
+    try:
+        return candidates.restore_version(plan_id, -1, payload.steps if payload else 1)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+
+@app.post("/api/v1/plans/{plan_id}/redo", dependencies=[Depends(require_api_key)])
+def redo(plan_id: str, payload: VersionStepRequest | None = None):
+    _record_or_404(plan_id)
+    try:
+        return candidates.restore_version(plan_id, 1, payload.steps if payload else 1)
+    except ValueError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
 @app.get("/api/v1/plans/{plan_id}", dependencies=[Depends(require_api_key)])
 def plan_status(plan_id: str):
