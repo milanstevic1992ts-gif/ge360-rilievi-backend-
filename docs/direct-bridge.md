@@ -68,10 +68,11 @@ Configurazione:
   bridge.env
   server.key
   server.pub
-  wg0.conf
+  wireguard/
+    wg0.conf
 
 /etc/wireguard/
-  wg0.conf -> /etc/ge360/direct-bridge/wg0.conf
+  wg0.conf -> /etc/ge360/direct-bridge/wireguard/wg0.conf
 ```
 
 Stato:
@@ -102,7 +103,7 @@ GE360_BRIDGE_SERVER_IP=10.88.0.1
 GE360_BRIDGE_PORT=51820
 GE360_BRIDGE_KEEPALIVE=25
 GE360_PUBLIC_HOST=
-GE360_BRIDGE_WG_CONFIG=/etc/ge360/direct-bridge/wg0.conf
+GE360_BRIDGE_WG_CONFIG=/etc/ge360/direct-bridge/wireguard/wg0.conf
 GE360_BRIDGE_AUTO_PORT_MAPPING=false
 ```
 
@@ -243,7 +244,7 @@ Questo lascia intatti:
 ```text
 /etc/ge360/direct-bridge
 /var/lib/ge360/direct-bridge
-/etc/ge360/direct-bridge/wg0.conf
+/etc/ge360/direct-bridge/wireguard/wg0.conf
 /etc/wireguard/wg0.conf (symlink)
 ```
 

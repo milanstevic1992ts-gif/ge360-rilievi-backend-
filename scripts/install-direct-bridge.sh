@@ -24,7 +24,8 @@ DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables miniu
 getent group "$GROUP_NAME" >/dev/null || groupadd --system "$GROUP_NAME"
 usermod -a -G "$GROUP_NAME" "$SERVICE_USER"
 
-install -d -m 0770 -o root -g "$GROUP_NAME" "$CONFIG_DIR"
+install -d -m 0750 -o root -g "$GROUP_NAME" "$CONFIG_DIR"
+install -d -m 0770 -o root -g "$GROUP_NAME" "$CONFIG_DIR/wireguard"
 mkdir -p /etc/wireguard
 install -d -m 0770 -o root -g "$GROUP_NAME" "$STATE_DIR" "$STATE_DIR/backups" "$STATE_DIR/qr" "$STATE_DIR/state"
 
@@ -39,7 +40,7 @@ GE360_BRIDGE_KEEPALIVE=25
 GE360_PUBLIC_HOST=
 GE360_BRIDGE_CONFIG_DIR=/etc/ge360/direct-bridge
 GE360_BRIDGE_STATE_DIR=/var/lib/ge360/direct-bridge
-GE360_BRIDGE_WG_CONFIG=/etc/ge360/direct-bridge/wg0.conf
+GE360_BRIDGE_WG_CONFIG=/etc/ge360/direct-bridge/wireguard/wg0.conf
 GE360_BRIDGE_AUTO_PORT_MAPPING=false
 EOF
   chown root:"$GROUP_NAME" "$ENV_FILE"
@@ -57,7 +58,7 @@ WG_IFACE="${GE360_BRIDGE_INTERFACE:-wg0}"
 WG_NETWORK="${GE360_BRIDGE_NETWORK:-10.88.0.0/24}"
 WG_SERVER_IP="${GE360_BRIDGE_SERVER_IP:-10.88.0.1}"
 WG_PORT="${GE360_BRIDGE_PORT:-51820}"
-WG_CONFIG="${GE360_BRIDGE_WG_CONFIG:-$CONFIG_DIR/${WG_IFACE}.conf}"
+WG_CONFIG="${GE360_BRIDGE_WG_CONFIG:-$CONFIG_DIR/wireguard/${WG_IFACE}.conf}"
 SYSTEM_WG_CONFIG="/etc/wireguard/${WG_IFACE}.conf"
 PRIVATE_KEY="$CONFIG_DIR/server.key"
 PUBLIC_KEY="$CONFIG_DIR/server.pub"
@@ -121,7 +122,7 @@ else
   echo "Existing managed $WG_CONFIG preserved."
 fi
 chown root:"$GROUP_NAME" "$WG_CONFIG"
-chmod 0660 "$WG_CONFIG"
+chmod 0640 "$WG_CONFIG"
 
 if [[ -L "$SYSTEM_WG_CONFIG" ]]; then
   [[ "$(readlink -f "$SYSTEM_WG_CONFIG")" == "$(readlink -m "$WG_CONFIG")" ]] || { echo "Unexpected WireGuard symlink target: $SYSTEM_WG_CONFIG"; exit 1; }

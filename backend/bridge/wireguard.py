@@ -127,7 +127,7 @@ class WireGuardController:
         with self._lock:
             if path.exists() and MANAGED_MARKER not in path.read_text(encoding="utf-8", errors="replace"):
                 raise RuntimeError(f"Refusing to overwrite unmanaged WireGuard config: {path}")
-            self._atomic_secret_write(path, self.render_config(devices), 0o660)
+            self._atomic_secret_write(path, self.render_config(devices), 0o600)
 
     def interface_active(self) -> bool:
         if not self.installed():
