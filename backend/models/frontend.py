@@ -48,7 +48,7 @@ class PlanPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
     version: int = 4
     kind: str = "ge360-rough-survey"
-    planId: str
+    planId: str | None = None
     name: str = "Rilievo"
     updatedAt: str | None = None
     rawStrokes: list[Any] = Field(default_factory=list)

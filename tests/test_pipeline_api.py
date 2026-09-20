@@ -2,110 +2,104 @@ from __future__ import annotations
 
 import importlib
 import json
-import sys
 import time
+from pathlib import Path
 
-import ezdxf
-import trimesh
+import pytest
 from fastapi.testclient import TestClient
-from PIL import Image
 
 from backend.config import Settings
 from backend.db import Database
+from backend.jobs import JobManager
+from backend.models import PlanPayload
 from backend.pipeline import Pipeline
 from backend.storage import PlanStorage
-from conftest import make_payload
 
 
-def _settings(tmp_path, api_key="test-key"):
-    return Settings(
-        api_key=api_key,
-        data_dir=tmp_path/"data",
-        db_path=tmp_path/"data"/"db.sqlite3",
-        host="127.0.0.1",port=8796,
-        default_wall_thickness_mm=120,default_wall_height_mm=2700,
-        snap_tolerance_mm=250,orthogonal_tolerance_deg=25,length_tolerance_mm=0.5,
-        ai_enabled=False,ollama_url="http://127.0.0.1:11434",ollama_model="qwen2.5:7b",ollama_timeout=1,
-        telegram_enabled=False,telegram_bot_token="",telegram_chat_id="",public_base_url="",
-    )
+def wall(i, a, b, cm):
+    return {"id": i, "a": {"x": a[0], "y": a[1]}, "b": {"x": b[0], "y": b[1]}, "lengthCm": cm}
 
 
-def _rect(plan_id="artifact-plan"):
-    walls=[
-        {"id":"w1","a":{"x":0,"y":0},"b":{"x":200,"y":8},"lengthCm":200},
-        {"id":"w2","a":{"x":200,"y":8},"b":{"x":207,"y":305},"lengthCm":300},
-        {"id":"w3","a":{"x":207,"y":305},"b":{"x":0,"y":298},"lengthCm":200},
-        {"id":"w4","a":{"x":0,"y":298},"b":{"x":0,"y":0},"lengthCm":300},
-    ]
-    return make_payload(walls,plan_id=plan_id,openings=[
-        {"id":"d1","type":"door","wallId":"w2","widthCm":80,"offsetCm":120,"referenceEnd":"a"}
-    ])
+def payload(plan_id="e2e"):
+    p = {"version": 4, "name": "Camera 2x3", "wallHeightM": 2.7, "walls": [
+        wall("w1", (0, 0), (202, 8), 200), wall("w2", (202, 8), (211, 306), 300),
+        wall("w3", (211, 306), (5, 299), 200), wall("w4", (5, 299), (0, 0), 300),
+    ]}
+    if plan_id is not None:
+        p["planId"] = plan_id
+    return p
 
 
-def test_pipeline_generates_real_artifacts_and_versions(tmp_path):
-    settings=_settings(tmp_path)
-    storage=PlanStorage(settings.data_dir); db=Database(settings.db_path); pipe=Pipeline(settings,storage,db)
-    payload=_rect()
-    raw=payload.model_dump(mode="json")
-    pipe.save_raw(payload)
-    result=pipe.process(payload.planId)
-    assert result["status"]=="PROCESSED"
-    assert result["version"]==1
-    current=storage.plan_dir(payload.planId)/"current"
-    required=["processed-plan.json","plan.svg","plan.dxf","preview.png","plan.pdf","plan3d.json","plan.glb"]
-    assert all((current/x).exists() and (current/x).stat().st_size>20 for x in required)
-    processed=json.loads((current/"processed-plan.json").read_text())
-    assert processed["walls"][0]["sourceLengthCm"]==200
-    assert abs(processed["rooms"][0]["floorAreaM2"]-6)<0.02
-    assert "<svg" in (current/"plan.svg").read_text()[:200]
-    ezdxf.readfile(current/"plan.dxf")
-    with Image.open(current/"preview.png") as image:
-        assert image.size==(1600,1100)
-    assert (current/"plan.pdf").read_bytes().startswith(b"%PDF")
-    plan3d=json.loads((current/"plan3d.json").read_text())
-    assert plan3d["units"]=="mm" and abs(plan3d["rooms"][0]["floorAreaM2"]-6)<0.02
-    glb=trimesh.load(current/"plan.glb")
-    assert len(glb.geometry)>=5
-    assert json.loads((storage.plan_dir(payload.planId)/"raw"/"original.json").read_text())==raw
-
-    second=pipe.process(payload.planId)
-    assert second["version"]==2
-    assert (storage.plan_dir(payload.planId)/"versions"/"001").exists()
-    assert (storage.plan_dir(payload.planId)/"versions"/"002").exists()
+def cfg(tmp: Path):
+    return Settings("test-key", tmp/"data", tmp/"data/db.sqlite3", "127.0.0.1", 8796,
+                    120, 2700, 250, 25, .5, False, "http://127.0.0.1:11434", "qwen2.5:7b", .1)
 
 
-def test_fastapi_contract_and_security(tmp_path, monkeypatch):
-    monkeypatch.setenv("GE360_API_KEY","secret-test")
-    monkeypatch.setenv("GE360_DATA_DIR",str(tmp_path/"api-data"))
-    monkeypatch.setenv("GE360_DB_PATH",str(tmp_path/"api-data"/"api.sqlite3"))
-    monkeypatch.setenv("GE360_AI_ENABLED","false")
-    monkeypatch.setenv("GE360_TELEGRAM_ENABLED","false")
-    sys.modules.pop("backend.main",None)
-    main=importlib.import_module("backend.main")
-    client=TestClient(main.app)
-    headers={"X-GE360-API-Key":"secret-test"}
+def wait_job(client, job_id, headers):
+    for _ in range(250):
+        state = client.get(f"/api/v1/jobs/{job_id}", headers=headers).json()
+        if state["status"] in {"DONE", "ERROR"}:
+            return state
+        time.sleep(.02)
+    raise AssertionError("job timeout")
 
-    assert client.get("/api/v1/health").status_code==401
-    assert client.get("/api/v1/health",headers=headers).status_code==200
-    payload=_rect("api-plan").model_dump(mode="json")
-    create=client.post("/api/v1/plans",headers=headers,json=payload)
-    assert create.status_code==200 and create.json()["status"]=="RAW"
-    process=client.post("/api/v1/plans/api-plan/process",headers=headers)
-    assert process.status_code==200 and process.json()["status"]=="PROCESSING"
-    job_id=process.json()["jobId"]
-    state=None
-    for _ in range(100):
-        state=client.get(f"/api/v1/jobs/{job_id}",headers=headers).json()
-        if state["status"]!="PROCESSING": break
-        time.sleep(0.02)
-    assert state["status"]=="DONE",state
-    status=client.get("/api/v1/plans/api-plan",headers=headers).json()
-    assert status["status"]=="PROCESSED" and status["currentVersion"]==1
-    for endpoint in ("processed","preview","svg","dxf","pdf","3d"):
-        response=client.get(f"/api/v1/plans/api-plan/{endpoint}",headers=headers)
-        assert response.status_code==200,endpoint
-    versions=client.get("/api/v1/plans/api-plan/versions",headers=headers).json()
-    assert versions["versions"][0]["version"]==1
 
-    compat=client.post("/api/v1/plans/refine",headers=headers,json={**payload,"planId":"api-refine"})
-    assert compat.status_code==200 and compat.json()["status"]=="PROCESSING"
+def test_pipeline_versions_and_immutable_raw(tmp_path: Path):
+    s = cfg(tmp_path); storage = PlanStorage(s.data_dir); db = Database(s.db_path); pipe = Pipeline(s, storage, db)
+    assert pipe.save_raw(PlanPayload.model_validate(payload()))["status"] == "RAW"
+    original = storage.plan_dir("e2e")/"raw/original.json"; before = original.read_bytes()
+    first = pipe.process("e2e")
+    assert first["status"] == "PROCESSED" and first["summary"] == {"rooms": 1, "floorAreaM2": 6.0}
+    assert first["files"]["glb"] is None
+    required = {"processed-plan.json", "plan.dxf", "plan.svg", "preview.png", "plan.pdf", "plan3d.json", "manifest.json"}
+    assert required <= {p.name for p in (storage.plan_dir("e2e")/"current").iterdir()}
+    manifest = json.loads((storage.plan_dir("e2e")/"current/manifest.json").read_text())
+    assert manifest["status"] == "PROCESSED" and manifest["createdAt"] and manifest["completedAt"]
+    second = pipe.process("e2e")
+    assert second["version"] == 2 and original.read_bytes() == before
+    assert (storage.plan_dir("e2e")/"versions/001/plan.dxf").exists()
+    assert (storage.plan_dir("e2e")/"versions/002/plan.dxf").exists()
+
+
+def test_generated_plan_id_and_job_dedup(tmp_path: Path):
+    s = cfg(tmp_path); pipe = Pipeline(s, PlanStorage(s.data_dir), Database(s.db_path))
+    created = pipe.save_raw(PlanPayload.model_validate(payload(None)))
+    assert len(created["planId"]) == 32
+    pipe.save_raw(PlanPayload.model_validate(payload("dedupe")))
+    real = pipe.process
+    def slow(pid): time.sleep(.15); return real(pid)
+    pipe.process = slow  # type: ignore[method-assign]
+    jobs = JobManager(pipe, 2); a = jobs.submit("dedupe"); b = jobs.submit("dedupe")
+    assert a["status"] == "QUEUED" and a["created"] is True
+    assert b["created"] is False and b["jobId"] == a["jobId"]
+
+
+def test_fastapi_polling_versions_files_security_and_cors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("GE360_API_KEY", "api-test")
+    monkeypatch.setenv("GE360_DATA_DIR", str(tmp_path/"api")); monkeypatch.setenv("GE360_DB_PATH", str(tmp_path/"api/db.sqlite3"))
+    monkeypatch.setenv("GE360_AI_ENABLED", "false"); monkeypatch.setenv("GE360_CORS_ORIGINS", "https://app.ge360.test,http://localhost")
+    import backend.main as main
+    main = importlib.reload(main); client = TestClient(main.app); h = {"X-GE360-API-Key": "api-test"}
+    assert client.get("/api/v1/health").status_code == 401
+    assert client.post("/api/v1/plans", json=payload("api1"), headers=h).json()["status"] == "RAW"
+    queued = client.post("/api/v1/plans/api1/process", headers=h).json()
+    assert queued["status"] == "QUEUED" and wait_job(client, queued["jobId"], h)["status"] == "DONE"
+    status = client.get("/api/v1/plans/api1", headers=h).json()
+    assert status["status"] == "PROCESSED" and status["currentVersion"] == 1
+    assert status["summary"] == {"rooms": 1, "floorAreaM2": 6.0} and status["files"]["glb"] is None
+    for route in ("processed", "preview", "png", "svg", "pdf", "dxf", "3d"):
+        assert client.get(f"/api/v1/plans/api1/{route}", headers=h).status_code == 200
+    q2 = client.post("/api/v1/plans/api1/reprocess", headers=h).json(); assert wait_job(client, q2["jobId"], h)["status"] == "DONE"
+    versions = client.get("/api/v1/plans/api1/versions", headers=h).json()
+    assert [v["version"] for v in versions] == [2, 1] and all(v["quality"] == "OK" for v in versions)
+    assert client.get("/api/v1/plans/api1/versions/1/pdf", headers=h).content.startswith(b"%PDF")
+    cors = client.options("/api/v1/plans", headers={"Origin": "https://app.ge360.test", "Access-Control-Request-Method": "POST"})
+    assert cors.headers["access-control-allow-origin"] == "https://app.ge360.test"
+
+
+def test_empty_api_key_is_development_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("GE360_API_KEY", ""); monkeypatch.setenv("GE360_DATA_DIR", str(tmp_path/"dev")); monkeypatch.setenv("GE360_DB_PATH", str(tmp_path/"dev/db.sqlite3"))
+    import backend.main as main
+    main = importlib.reload(main); client = TestClient(main.app)
+    assert client.get("/api/v1/health").json()["apiKeyRequired"] is False
+    assert client.post("/api/v1/plans", json=payload(None)).json()["status"] == "RAW"

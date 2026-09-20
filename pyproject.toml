@@ -9,5 +9,6 @@ archit = ["archit-app>=0.7,<0.8"]
 glb = ["trimesh>=4.4"]
 
 [tool.pytest.ini_options]
+pythonpath = ["."]
 testpaths = ["tests"]
 addopts = "-ra"
