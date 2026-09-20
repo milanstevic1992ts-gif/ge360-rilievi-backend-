@@ -1,0 +1,9 @@
+services:
+  ge360-rilievi:
+    build: .
+    env_file: .env
+    ports:
+      - "127.0.0.1:8796:8796"
+    volumes:
+      - ./local-data:/opt/ge360/data/rilievi
+    restart: unless-stopped
