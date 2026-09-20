@@ -4,7 +4,7 @@ Backend Python/FastAPI per trasformare il rilievo rapido di `ge360-open-plan3d` 
 
 Regola centrale: **le misure dichiarate dall'utente sono autorevoli**. Il backend può correggere topologia, piccoli gap e vincoli geometrici, ma non modifica `declaredLengthMm`, larghezze/offset delle aperture o altre misure utente per forzare la chiusura.
 
-## Stato V1 sulla branch `feature/deterministic-pipeline-v1`
+## Stato V1 integrato su `main`
 
 Implementato e coperto da test:
 
@@ -60,7 +60,30 @@ Con `GE360_API_KEY=` vuoto l'API parte in modalità sviluppo e registra un warni
 openssl rand -hex 32
 ```
 
-## Collegamento facile con Tailscale
+## GE360 DIRECT BRIDGE (WireGuard)
+
+Il collegamento remoto nativo è **GE360 DIRECT BRIDGE**: WireGuard crea il tunnel e GE360 gestisce peer, QR, stato, diagnostica e revoca. Nessun Tailscale, relay o servizio cloud è necessario per il percorso Direct Bridge.
+
+Installazione Debian:
+
+```bash
+sudo bash scripts/install-direct-bridge.sh
+```
+
+Poi aprire sul server:
+
+```text
+http://127.0.0.1:9888/setup/
+```
+
+Configurazione predefinita: `wg0`, rete `10.88.0.0/24`, server `10.88.0.1`, WireGuard UDP `51820`, backend `10.88.0.1:9888`. Il QR dispositivo è one-shot e la private key Android non viene persistita dal backend.
+
+Dati e chiavi restano fuori da Git in `/etc/ge360/direct-bridge`, `/var/lib/ge360/direct-bridge` e `/etc/wireguard/wg0.conf`.
+
+Dettagli completi, Android, CGNAT, test e rollback: `docs/direct-bridge.md`.
+
+## Tailscale (opzionale/legacy)
+
 
 Il backend resta in ascolto su `127.0.0.1:9888` e può essere pubblicato privatamente nel tailnet tramite Tailscale Serve.
 
