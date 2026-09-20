@@ -60,6 +60,33 @@ Con `GE360_API_KEY=` vuoto l'API parte in modalità sviluppo e registra un warni
 openssl rand -hex 32
 ```
 
+## Collegamento facile con Tailscale
+
+Il backend resta in ascolto su `127.0.0.1:8796` e può essere pubblicato privatamente nel tailnet tramite Tailscale Serve.
+
+Dopo l'installazione:
+
+```bash
+sudo bash scripts/setup-tailscale.sh
+```
+
+Lo script verifica Tailscale, configura Serve, genera una API key persistente se manca e stampa direttamente i due valori da inserire nel frontend:
+
+```text
+Backend URL : https://<nome-nodo>.ts.net/api/v1
+API key     : <chiave-generata>
+```
+
+È disponibile anche la pagina locale:
+
+```text
+http://127.0.0.1:8796/setup/
+```
+
+Da qui si vedono stato Tailscale, MagicDNS/Serve, URL frontend e si può generare o ruotare la API key. La chiave generata è salvata fuori dalla repository in `GE360_API_KEY_FILE` (default `/opt/ge360/data/rilievi/.api-key`) con permessi 0600 e diventa valida immediatamente, senza riavviare Uvicorn.
+
+Dettagli: `docs/tailscale-setup.md`.
+
 ## Installazione Debian/systemd
 
 ```bash
@@ -84,6 +111,7 @@ La porta viene pubblicata solo su `127.0.0.1:8796` e i dati persistono in `./loc
 
 ```text
 GE360_API_KEY=
+GE360_API_KEY_FILE=/opt/ge360/data/rilievi/.api-key
 GE360_DATA_DIR=/opt/ge360/data/rilievi
 GE360_DB_PATH=/opt/ge360/data/rilievi/ge360-rilievi.sqlite3
 GE360_HOST=127.0.0.1
