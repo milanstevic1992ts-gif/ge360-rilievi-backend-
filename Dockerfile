@@ -5,5 +5,5 @@ RUN apt-get update && apt-get install -y --no-install-recommends libgl1 libglib2
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 COPY . .
-EXPOSE 8796
-CMD ["uvicorn","backend.main:app","--host","0.0.0.0","--port","8796"]
+EXPOSE 9888
+CMD ["uvicorn","backend.main:app","--host","0.0.0.0","--port","9888"]
