@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "GE360 Agent Experience",
+  "type": "object",
+  "required": [
+    "task",
+    "inputSummary",
+    "agentProposal",
+    "validatorResult",
+    "finalStatus"
+  ],
+  "properties": {
+    "task": {
+      "type": "string"
+    },
+    "inputSummary": {
+      "type": "object"
+    },
+    "solverWarnings": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "agentProposal": {
+      "type": "object"
+    },
+    "acceptedOperations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "rejectedOperations": {
+      "type": "array",
+      "items": {
+        "type": "object"
+      }
+    },
+    "validatorResult": {
+      "type": "object"
+    },
+    "finalStatus": {
+      "type": "string"
+    },
+    "userCorrection": {
+      "type": [
+        "string",
+        "null"
+      ]
+    }
+  }
+}
