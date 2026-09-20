@@ -99,6 +99,14 @@ def global_ipv6_addresses(runner: Runner = run_command) -> list[str]:
     return found
 
 
+def port_mapping_capabilities() -> dict:
+    return {
+        "upnp_igd": bool(shutil.which("upnpc")),
+        "nat_pmp": bool(shutil.which("natpmpc")),
+        "pcp": bool(shutil.which("pcp") or shutil.which("pcp-client")),
+    }
+
+
 def format_endpoint(host: str, port: int) -> str:
     clean = host.strip().strip("[]")
     try:

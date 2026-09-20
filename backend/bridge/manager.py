@@ -1,7 +1,17 @@
 from __future__ import annotations
 
 from .config import BridgeSettings
-from .network import backend_port_open, default_route, resolve_public_endpoint, try_upnp_mapping
+from .network import (
+    backend_port_open,
+    classify_external_ipv4,
+    default_route,
+    global_ipv6_addresses,
+    local_ipv4_for_default_route,
+    port_mapping_capabilities,
+    resolve_public_endpoint,
+    try_upnp_mapping,
+    upnp_external_ipv4,
+)
 from .qr import wireguard_qr_png_base64
 from .store import BridgeStore
 from .wireguard import WireGuardController
@@ -49,6 +59,7 @@ class DirectBridgeManager:
         installed = self.wireguard.installed()
         active = self.wireguard.interface_active() if installed else False
         active_devices = self.store.list(active_only=True)
+        handshakes = [row.get("last_handshake_at") for row in active_devices if row.get("last_handshake_at")]
         state_code = "ONLINE" if active and endpoint.available else endpoint.state_code
         if not self.settings.enabled:
             state_code = "DISABLED"
@@ -63,6 +74,9 @@ class DirectBridgeManager:
             "status": "online" if state_code == "ONLINE" else "offline", "state_code": state_code,
             "device_count": len(active_devices), "public_endpoint": endpoint.endpoint,
             "endpoint_source": endpoint.source, "remote_reachability_verified": endpoint.externally_verified,
+            "last_handshake": max(handshakes) if handshakes else None,
+            "rx_bytes": sum(int(row.get("rx_bytes") or 0) for row in active_devices),
+            "tx_bytes": sum(int(row.get("tx_bytes") or 0) for row in active_devices),
             "message": endpoint.message,
         }
 
@@ -131,6 +145,13 @@ class DirectBridgeManager:
     def diagnostics(self) -> dict:
         endpoint = resolve_public_endpoint(self.settings)
         route = default_route()
+        local_ipv4 = local_ipv4_for_default_route()
+        external_ipv4, external_ipv4_error = upnp_external_ipv4()
+        ipv6 = global_ipv6_addresses()
+        external_ipv4_class = classify_external_ipv4(external_ipv4)
+        nat_state = "UNKNOWN"
+        if local_ipv4 and external_ipv4:
+            nat_state = "CGNAT" if external_ipv4_class in {"CGNAT", "NON_PUBLIC"} else ("NAT" if local_ipv4 != external_ipv4 else "DIRECT")
         mapping = try_upnp_mapping(self.settings) if self.settings.auto_port_mapping else {"enabled": False, "attempted": False, "mapped": False, "error": None}
         try:
             wg_dump = self.wireguard.dump()
@@ -144,8 +165,12 @@ class DirectBridgeManager:
             "wireguard_port": self.settings.listen_port, "backend_port": self.settings.backend_port,
             "backend_local_reachable": backend_port_open(self.settings.backend_port),
             "gateway": route.get("gateway"), "gateway_interface": route.get("interface"),
+            "lan_ipv4": local_ipv4, "external_ipv4": external_ipv4,
+            "external_ipv4_error": external_ipv4_error, "external_ipv4_class": external_ipv4_class,
+            "global_ipv6": ipv6, "nat_state": nat_state,
             "public_endpoint": endpoint.endpoint, "public_host": endpoint.host,
             "endpoint_source": endpoint.source, "remote_state_code": endpoint.state_code,
             "remote_message": endpoint.message, "external_reachability_verified": endpoint.externally_verified,
+            "port_mapping_capabilities": port_mapping_capabilities(),
             "port_mapping": mapping, "peers": wg_dump.get("peers", []),
         }
