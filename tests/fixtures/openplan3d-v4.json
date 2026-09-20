@@ -1,0 +1,63 @@
+{
+  "version": 4,
+  "kind": "ge360-rough-survey",
+  "planId": "frontend-v4-contract",
+  "name": "Rilievo frontend reale",
+  "updatedAt": "2026-09-20T20:00:00.000Z",
+  "rawStrokes": [
+    {
+      "id": "stroke-1",
+      "points": [
+        {"x": 100, "y": 100},
+        {"x": 305, "y": 112},
+        {"x": 315, "y": 410}
+      ]
+    }
+  ],
+  "walls": [
+    {"id": "w1", "a": {"x": 100, "y": 100}, "b": {"x": 305, "y": 112}, "lengthCm": 200, "strokeId": "stroke-1"},
+    {"id": "w2", "a": {"x": 305, "y": 112}, "b": {"x": 315, "y": 410}, "lengthCm": 300, "strokeId": "stroke-1"},
+    {"id": "w3", "a": {"x": 315, "y": 410}, "b": {"x": 104, "y": 402}, "lengthCm": 200},
+    {"id": "w4", "a": {"x": 104, "y": 402}, "b": {"x": 100, "y": 100}, "lengthCm": 300}
+  ],
+  "openings": [
+    {
+      "id": "door-1",
+      "type": "door",
+      "wallId": "w2",
+      "position": 0.4666666667,
+      "widthCm": 80,
+      "offsetCm": 100,
+      "referenceEnd": "a"
+    }
+  ],
+  "rooms": [
+    {
+      "id": "room-1",
+      "name": "Camera",
+      "wallIds": ["w1", "w2", "w3", "w4"],
+      "faceKey": "frontend-face-1"
+    }
+  ],
+  "notes": [
+    {
+      "id": "note-1",
+      "targetType": "floor",
+      "rawText": "pavimento da piastrellare"
+    }
+  ],
+  "wallHeightM": 2.7,
+  "surfaces": {
+    "floorM2": 6.0,
+    "ceilingM2": 6.0
+  },
+  "summary": {
+    "walls": 4,
+    "missing": 0,
+    "doors": 1,
+    "windows": 0,
+    "rooms": 1,
+    "notes": 1,
+    "floorM2": 6.0
+  }
+}
