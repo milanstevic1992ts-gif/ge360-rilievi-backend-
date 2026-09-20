@@ -70,8 +70,7 @@ class PlanStorage:
         path = self.ensure(plan_id) / "logs" / "processing.jsonl"
         row = {"ts": datetime.now(timezone.utc).isoformat(), **event}
         with path.open("a", encoding="utf-8") as fh:
-            fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "
-")
+            fh.write(json.dumps(row, ensure_ascii=False, separators=(",", ":")) + "\n")
 
     @staticmethod
     def write_json_atomic(path: Path, data: Any) -> None:
