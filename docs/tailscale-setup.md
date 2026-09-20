@@ -1,6 +1,6 @@
 # Collegamento GE360 tramite Tailscale
 
-GE360 Rilievi mantiene Uvicorn su `127.0.0.1:8796` e usa Tailscale Serve come reverse proxy HTTPS privato verso il tailnet.
+GE360 Rilievi mantiene Uvicorn su `127.0.0.1:9888` e usa Tailscale Serve come reverse proxy HTTPS privato verso il tailnet.
 
 Questa scelta evita di esporre direttamente Uvicorn sulla LAN.
 
@@ -16,7 +16,7 @@ Lo script:
 1. verifica che Tailscale sia installato e connesso;
 2. crea una API key GE360 se non esiste;
 3. la salva fuori dal repository in `/opt/ge360/data/rilievi/.api-key` con permessi 0600;
-4. configura Tailscale Serve verso `http://127.0.0.1:8796`;
+4. configura Tailscale Serve verso `http://127.0.0.1:9888`;
 5. stampa il Backend URL e la API key da copiare nel frontend.
 
 Esempio risultato:
@@ -31,7 +31,7 @@ API key     : <chiave-generata>
 Aprire sul server:
 
 ```text
-http://127.0.0.1:8796/setup/
+http://127.0.0.1:9888/setup/
 ```
 
 La pagina mostra:
