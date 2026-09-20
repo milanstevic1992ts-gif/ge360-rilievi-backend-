@@ -47,7 +47,7 @@ def test_agent_accepts_only_tools_never_coordinates_or_measurement_edits():
 
 
 def test_ollama_offline_does_not_break_deterministic_pipeline(tmp_path: Path):
-    s = Settings("", tmp_path/"data", tmp_path/"data/db.sqlite3", "127.0.0.1", 8796,
+    s = Settings("", tmp_path/"data", tmp_path/"data/db.sqlite3", "127.0.0.1", 9888,
                  120, 2700, 250, 25, .5, True, "http://127.0.0.1:9", "offline", .05)
     storage = PlanStorage(s.data_dir); pipe = Pipeline(s, storage, Database(s.db_path))
     p = PlanPayload.model_validate({"planId": "offline", "walls": [
