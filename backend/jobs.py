@@ -12,8 +12,9 @@ from backend.pipeline import Pipeline
 class JobManager:
     """Small in-process queue with one active job per plan.
 
-    V1 deliberately avoids Redis/Celery. The interface is isolated so an external
-    worker can replace it later without changing the HTTP contract.
+    V1 deliberately avoids Redis/Celery and assumes one backend process owns the
+    in-process queue. The interface is isolated so an external worker can replace
+    it later without changing the HTTP contract.
     """
 
     def __init__(self, pipeline: Pipeline, max_workers: int = 2):
@@ -39,11 +40,24 @@ class JobManager:
                         "created": False,
                     }
 
-            # A PROCESSING/QUEUED status without a local Future can happen after
-            # process restart. Do not start a competing job automatically.
             row = self.pipeline.db.get(plan_id)
             if row and row["status"] in {PlanStatus.QUEUED.value, PlanStatus.PROCESSING.value}:
-                return {"jobId": None, "status": row["status"], "created": False}
+                # No local Future owns this plan, so this state survived a service
+                # restart/crash. An explicit process/reprocess request is allowed
+                # to recover it. This is safe for the V1 single-process worker
+                # model and avoids plans remaining stuck forever.
+                self.pipeline.storage.append_log(
+                    plan_id,
+                    {
+                        "event": "orphaned_job_recovered",
+                        "previousStatus": row["status"],
+                    },
+                )
+                self.pipeline.db.set_status(
+                    plan_id,
+                    PlanStatus.ERROR,
+                    error=f"interrupted {row['status'].lower()} job recovered before requeue",
+                )
 
             job_id = str(uuid.uuid4())
             self.pipeline.db.set_status(plan_id, PlanStatus.QUEUED, error="")
