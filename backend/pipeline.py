@@ -117,6 +117,8 @@ class Pipeline:
                         self.settings.length_tolerance_mm,
                         self.settings.orthogonal_tolerance_deg,
                     ).improve(normalized, topology, solved)
+                    normalized = run.plan
+                    topology = run.topology
                     solved = run.solved
                     agent_log = {
                         "enabled": True,

@@ -8,6 +8,10 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from pydantic import BaseModel, ConfigDict, Field
+
+from backend.agent.notes import rewrite_note
+from backend.agent.ollama import OllamaClient
 
 from backend.config import get_settings
 from backend.db import Database
@@ -132,6 +136,41 @@ def health():
         "version": "1.1.0",
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(settings.api_key),
+    }
+
+
+class NoteRewriteRequest(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    rawText: str
+    planId: str | None = None
+    planName: str | None = None
+    targetType: str
+    targetId: str | None = None
+    targetLabel: str | None = None
+    roomName: str | None = None
+    context: dict = Field(default_factory=dict)
+
+
+@app.post("/api/v1/notes/rewrite", dependencies=[Depends(require_api_key)])
+def notes_rewrite(payload: NoteRewriteRequest):
+    raw = payload.rawText.strip()
+    if not raw:
+        raise HTTPException(status_code=422, detail="Appunto vuoto")
+    if len(raw) > 5000:
+        raise HTTPException(status_code=422, detail="Appunto troppo lungo")
+    result = rewrite_note(
+        OllamaClient(settings.ollama_url, settings.ollama_model, settings.ollama_timeout),
+        payload.model_dump(mode="json"),
+    )
+    if result is None:
+        raise HTTPException(status_code=503, detail="Ollama non raggiungibile")
+    return {
+        "ok": True,
+        "model": settings.ollama_model,
+        "rawText": raw,
+        "cleanedText": str(result.get("cleanedText") or raw),
+        "tasks": [str(x) for x in (result.get("tasks") or [])],
+        "needsClarification": [str(x) for x in (result.get("needsClarification") or [])],
     }
 
 
