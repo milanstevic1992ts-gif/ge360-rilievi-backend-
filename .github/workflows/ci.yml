@@ -17,3 +17,5 @@ jobs:
       - run: bash scripts/smoke-http.sh
       - run: bash -n scripts/install-debian.sh
       - run: bash -n scripts/setup-tailscale.sh
+      - run: bash -n scripts/install-direct-bridge.sh
+      - run: bash -n scripts/direct-bridge-firewall.sh
