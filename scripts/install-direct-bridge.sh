@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+APP_DIR="${GE360_APP_DIR:-/opt/ge360/ge360-rilievi-backend}"
+SERVICE_NAME="ge360-rilievi-backend.service"
+SERVICE_USER="${GE360_SERVICE_USER:-jarvis}"
+GROUP_NAME="ge360-bridge"
+CONFIG_DIR="/etc/ge360/direct-bridge"
+STATE_DIR="/var/lib/ge360/direct-bridge"
+ENV_FILE="$CONFIG_DIR/bridge.env"
+MARKER="# Managed by GE360 DIRECT BRIDGE"
+
+if [[ $EUID -ne 0 ]]; then
+  echo "Run with sudo/root: sudo bash scripts/install-direct-bridge.sh"
+  exit 1
+fi
+[[ -f /etc/debian_version ]] || { echo "GE360 Direct Bridge installer currently supports Debian."; exit 1; }
+command -v apt-get >/dev/null 2>&1 || { echo "apt-get not found"; exit 1; }
+id "$SERVICE_USER" >/dev/null 2>&1 || { echo "Service user $SERVICE_USER not found"; exit 1; }
+
+apt-get update
+DEBIAN_FRONTEND=noninteractive apt-get install -y wireguard-tools nftables miniupnpc
+
+getent group "$GROUP_NAME" >/dev/null || groupadd --system "$GROUP_NAME"
+usermod -a -G "$GROUP_NAME" "$SERVICE_USER"
+
+install -d -m 0750 -o root -g "$GROUP_NAME" "$CONFIG_DIR" /etc/wireguard
+install -d -m 0770 -o root -g "$GROUP_NAME" "$STATE_DIR" "$STATE_DIR/backups" "$STATE_DIR/qr" "$STATE_DIR/state"
+
+if [[ ! -f "$ENV_FILE" ]]; then
+  cat > "$ENV_FILE" <<'EOF'
+GE360_BRIDGE_ENABLED=true
+GE360_BRIDGE_INTERFACE=wg0
+GE360_BRIDGE_NETWORK=10.88.0.0/24
+GE360_BRIDGE_SERVER_IP=10.88.0.1
+GE360_BRIDGE_PORT=51820
+GE360_BRIDGE_KEEPALIVE=25
+GE360_PUBLIC_HOST=
+GE360_BRIDGE_CONFIG_DIR=/etc/ge360/direct-bridge
+GE360_BRIDGE_STATE_DIR=/var/lib/ge360/direct-bridge
+GE360_BRIDGE_WG_CONFIG=/etc/wireguard/wg0.conf
+GE360_BRIDGE_AUTO_PORT_MAPPING=false
+EOF
+  chown root:"$GROUP_NAME" "$ENV_FILE"
+  chmod 0640 "$ENV_FILE"
+else
+  echo "Existing $ENV_FILE preserved."
+fi
+
+set -a
+# shellcheck disable=SC1090
+source "$ENV_FILE"
+set +a
+
+WG_IFACE="${GE360_BRIDGE_INTERFACE:-wg0}"
+WG_NETWORK="${GE360_BRIDGE_NETWORK:-10.88.0.0/24}"
+WG_SERVER_IP="${GE360_BRIDGE_SERVER_IP:-10.88.0.1}"
+WG_PORT="${GE360_BRIDGE_PORT:-51820}"
+WG_CONFIG="${GE360_BRIDGE_WG_CONFIG:-/etc/wireguard/${WG_IFACE}.conf}"
+PRIVATE_KEY="$CONFIG_DIR/server.key"
+PUBLIC_KEY="$CONFIG_DIR/server.pub"
+
+[[ "$WG_IFACE" =~ ^[A-Za-z0-9_=+.-]{1,15}$ ]] || { echo "Invalid WireGuard interface: $WG_IFACE"; exit 1; }
+
+if [[ -f "$WG_CONFIG" ]] && ! grep -Fq "$MARKER" "$WG_CONFIG"; then
+  echo "Refusing to overwrite unmanaged WireGuard config: $WG_CONFIG"
+  echo "Use another GE360_BRIDGE_INTERFACE or migrate that interface manually."
+  exit 1
+fi
+
+if [[ -s "$WG_CONFIG" ]]; then
+  existing_private="$(awk -F' = ' '/^PrivateKey = / {print $2; exit}' "$WG_CONFIG")"
+  if [[ -n "$existing_private" && ! -s "$PRIVATE_KEY" ]]; then
+    umask 027
+    printf '%s\n' "$existing_private" > "$PRIVATE_KEY"
+  elif [[ -n "$existing_private" && -s "$PRIVATE_KEY" && "$existing_private" != "$(tr -d '\r\n' < "$PRIVATE_KEY")" ]]; then
+    echo "Server key mismatch between $PRIVATE_KEY and $WG_CONFIG; refusing automatic rotation."
+    exit 1
+  fi
+fi
+
+if [[ ! -s "$PRIVATE_KEY" ]]; then
+  umask 027
+  wg genkey > "$PRIVATE_KEY"
+  echo "Created persistent GE360 WireGuard server identity."
+else
+  echo "Existing server WireGuard private key preserved."
+fi
+if [[ ! -s "$PUBLIC_KEY" ]]; then
+  wg pubkey < "$PRIVATE_KEY" > "$PUBLIC_KEY"
+fi
+chown root:"$GROUP_NAME" "$PRIVATE_KEY" "$PUBLIC_KEY"
+chmod 0640 "$PRIVATE_KEY" "$PUBLIC_KEY"
+
+if [[ ! -f "$WG_CONFIG" ]]; then
+  private="$(tr -d '\r\n' < "$PRIVATE_KEY")"
+  cat > "$WG_CONFIG" <<EOF
+$MARKER
+[Interface]
+Address = $WG_SERVER_IP/${WG_NETWORK#*/}
+ListenPort = $WG_PORT
+PrivateKey = $private
+EOF
+  chown root:"$GROUP_NAME" "$WG_CONFIG"
+  chmod 0640 "$WG_CONFIG"
+else
+  echo "Existing managed $WG_CONFIG preserved."
+fi
+
+install -m 0755 "$APP_DIR/scripts/direct-bridge-firewall.sh" /usr/local/sbin/ge360-direct-bridge-firewall
+
+cat > /etc/systemd/system/ge360-direct-bridge-firewall.service <<EOF
+[Unit]
+Description=GE360 Direct Bridge firewall guard
+Before=$SERVICE_NAME
+After=network-pre.target
+Wants=network-pre.target
+
+[Service]
+Type=oneshot
+EnvironmentFile=-$ENV_FILE
+ExecStart=/usr/local/sbin/ge360-direct-bridge-firewall
+ExecStop=-/usr/sbin/nft delete table inet ge360_direct_bridge
+RemainAfterExit=yes
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+mkdir -p "/etc/systemd/system/$SERVICE_NAME.d"
+cat > "/etc/systemd/system/$SERVICE_NAME.d/direct-bridge.conf" <<EOF
+[Unit]
+After=wg-quick@${WG_IFACE}.service ge360-direct-bridge-firewall.service
+Wants=wg-quick@${WG_IFACE}.service ge360-direct-bridge-firewall.service
+
+[Service]
+EnvironmentFile=-$ENV_FILE
+SupplementaryGroups=$GROUP_NAME
+AmbientCapabilities=CAP_NET_ADMIN
+CapabilityBoundingSet=CAP_NET_ADMIN
+ReadWritePaths=$CONFIG_DIR $STATE_DIR /etc/wireguard
+ExecStart=
+ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 9888
+EOF
+
+systemctl daemon-reload
+systemctl enable --now ge360-direct-bridge-firewall.service
+systemctl enable --now "wg-quick@${WG_IFACE}.service"
+
+if systemctl is-active --quiet "$SERVICE_NAME"; then
+  systemctl restart "$SERVICE_NAME"
+fi
+
+wg show "$WG_IFACE" >/dev/null
+echo
+echo "GE360 DIRECT BRIDGE installed."
+echo "Interface : $WG_IFACE"
+echo "VPN server: $WG_SERVER_IP"
+echo "WG port   : UDP $WG_PORT"
+echo "Backend   : http://$WG_SERVER_IP:9888"
+echo "Server public key: $(cat "$PUBLIC_KEY")"
+echo
+echo "If GE360_PUBLIC_HOST is empty, GE360 will try router UPnP discovery or public IPv6."
+echo "If your router does not support automatic mapping, forward only UDP $WG_PORT to this server."
+echo "Never forward TCP 9888 on the router."
