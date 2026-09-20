@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 
 from backend.agent.ollama import OllamaClient
 from backend.agent.planner import AgentPlanner
+from backend.agent.prompt_loader import AUTONOMOUS_REPAIR_BUDGET, INSTRUCTION_VERSION
 from backend.agent.tools import ANGLE_TOOLS, TOPOLOGY_TOOLS, apply_topology_operation, operation_to_angle_override
 from backend.agent.validator import authoritative_snapshot, validate_candidate
 from backend.cad.model import build_cad_model
@@ -25,6 +26,10 @@ class AgentRun:
     rejected: list[dict] = field(default_factory=list)
     iterations: int = 0
     offline: bool = False
+    instruction_version: str = INSTRUCTION_VERSION
+    repair_budget: float = AUTONOMOUS_REPAIR_BUDGET
+    assessment: dict = field(default_factory=dict)
+    missing_capabilities: list[dict] = field(default_factory=list)
 
 
 class GeometryAgent:
@@ -51,6 +56,8 @@ class GeometryAgent:
 
         for iteration in range(self.max_iterations):
             operations = self.planner.propose(working_plan, current, score)
+            run.assessment = dict(self.planner.last_assessment)
+            run.missing_capabilities = list(self.planner.last_missing_capabilities)
             if operations is None:
                 run.offline = True
                 break

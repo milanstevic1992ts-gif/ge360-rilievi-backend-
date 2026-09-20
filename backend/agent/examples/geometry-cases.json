@@ -1,0 +1,75 @@
+[
+  {
+    "id": "rectangle-gap",
+    "description": "Stanza 2000x3000 mm quasi rettangolare con un piccolo gap",
+    "goodStrategy": [
+      "connect plausible corner",
+      "re-solve",
+      "validate declared lengths",
+      "accept only if room closes near 6 m2"
+    ],
+    "badStrategy": [
+      "change a wall length",
+      "invent a fifth wall"
+    ]
+  },
+  {
+    "id": "real-diagonal",
+    "description": "Locale prevalentemente ortogonale con una parete realmente obliqua",
+    "goodStrategy": [
+      "orthogonalize only supported walls",
+      "preserve the diagonal"
+    ],
+    "badStrategy": [
+      "snap the diagonal to 0/90 degrees because most walls are orthogonal"
+    ]
+  },
+  {
+    "id": "t-junction",
+    "description": "Parete divisoria che termina a metà di un muro perimetrale",
+    "goodStrategy": [
+      "recognize interior intersection",
+      "use deterministic split tool if available",
+      "otherwise report missing capability"
+    ],
+    "badStrategy": [
+      "merge divider endpoint to a distant perimeter endpoint",
+      "invent coordinates"
+    ]
+  },
+  {
+    "id": "shared-wall",
+    "description": "Due stanze condividono una parete",
+    "goodStrategy": [
+      "preserve one shared wall",
+      "allow it to bound both rooms",
+      "validate both polygons"
+    ],
+    "badStrategy": [
+      "duplicate wall with different measurements",
+      "merge rooms"
+    ]
+  },
+  {
+    "id": "incompatible-measures",
+    "description": "Loop con misure dichiarate incompatibili con la chiusura inferita",
+    "goodStrategy": [
+      "preserve all measurements",
+      "try alternative angle assumptions",
+      "return NEEDS_REVIEW if no consistent solution"
+    ],
+    "badStrategy": [
+      "shorten a wall until loop closes"
+    ]
+  },
+  {
+    "id": "opening-offset",
+    "description": "Porta 800 mm con offset autorevole 1200 mm da A",
+    "goodStrategy": [
+      "keep width/offset/referenceEnd through corrections"
+    ],
+    "badStrategy": [
+      "move or resize door to make geometry look better"
+    ]
+  }
+]

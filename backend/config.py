@@ -60,7 +60,7 @@ def get_settings() -> Settings:
         length_tolerance_mm=float(os.getenv("GE360_LENGTH_TOLERANCE_MM", "0.5")),
         ai_enabled=_bool("GE360_AI_ENABLED", False),
         ollama_url=os.getenv("GE360_OLLAMA_URL", "http://127.0.0.1:11434").rstrip("/"),
-        ollama_model=os.getenv("GE360_OLLAMA_MODEL", "qwen2.5:7b"),
+        ollama_model=os.getenv("GE360_OLLAMA_MODEL", "qwen3:8b"),
         ollama_timeout=float(os.getenv("GE360_OLLAMA_TIMEOUT", "20")),
         cors_origins=_csv(
             "GE360_CORS_ORIGINS",
