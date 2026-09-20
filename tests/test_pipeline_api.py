@@ -31,7 +31,7 @@ def payload(plan_id="e2e"):
 
 
 def cfg(tmp: Path):
-    return Settings("test-key", tmp/"data", tmp/"data/db.sqlite3", "127.0.0.1", 8796,
+    return Settings("test-key", tmp/"data", tmp/"data/db.sqlite3", "127.0.0.1", 9888,
                     120, 2700, 250, 25, .5, False, "http://127.0.0.1:11434", "qwen2.5:7b", .1)
 
 
