@@ -12,4 +12,6 @@ strutturati è documentato in:
 
 `docs/input-schema-v3.md` — ambienti automatici, foto locali collegate e computo progressivo.
 
-Lo schema v3 è il riferimento corrente per la futura pipeline PDF/DXF/SVG/PNG/JSON/3D.
+`docs/input-schema-v4.md` — archivio cantieri e foto direzionali.
+
+Lo schema v4 è il riferimento corrente per la futura pipeline PDF/DXF/SVG/PNG/JSON/3D.
