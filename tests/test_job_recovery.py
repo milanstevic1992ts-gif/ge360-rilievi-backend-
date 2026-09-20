@@ -17,7 +17,7 @@ def _wall(i, a, b, cm):
 
 def _settings(tmp_path: Path) -> Settings:
     return Settings(
-        "", tmp_path / "data", tmp_path / "data/db.sqlite3", "127.0.0.1", 8796,
+        "", tmp_path / "data", tmp_path / "data/db.sqlite3", "127.0.0.1", 9888,
         120, 2700, 250, 25, .5, False,
         "http://127.0.0.1:11434", "qwen2.5:7b", .1,
     )

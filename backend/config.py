@@ -52,7 +52,7 @@ def get_settings() -> Settings:
         data_dir=data_dir,
         db_path=Path(os.getenv("GE360_DB_PATH", str(data_dir / "ge360-rilievi.sqlite3"))),
         host=os.getenv("GE360_HOST", "127.0.0.1"),
-        port=int(os.getenv("GE360_PORT", "8796")),
+        port=int(os.getenv("GE360_PORT", "9888")),
         default_wall_thickness_mm=float(os.getenv("GE360_DEFAULT_WALL_THICKNESS_MM", "120")),
         default_wall_height_mm=float(os.getenv("GE360_DEFAULT_WALL_HEIGHT_MM", "2700")),
         snap_tolerance_mm=float(os.getenv("GE360_SNAP_TOLERANCE_MM", "250")),

@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-PORT="${GE360_PORT:-8796}"
+PORT="${GE360_PORT:-9888}"
 DATA_DIR="${GE360_DATA_DIR:-/opt/ge360/data/rilievi}"
 KEY_FILE="${GE360_API_KEY_FILE:-${DATA_DIR}/.api-key}"
 SERVICE_USER="${GE360_SERVICE_USER:-jarvis}"

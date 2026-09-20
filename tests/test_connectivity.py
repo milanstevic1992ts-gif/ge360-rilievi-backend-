@@ -9,7 +9,7 @@ from backend import connectivity
 
 def cfg(tmp_path: Path) -> Settings:
     return Settings(
-        "", tmp_path / "data", tmp_path / "data/db.sqlite3", "127.0.0.1", 8796,
+        "", tmp_path / "data", tmp_path / "data/db.sqlite3", "127.0.0.1", 9888,
         120, 2700, 250, 25, .5, False,
         "http://127.0.0.1:11434", "qwen3:8b", .1,
     )
@@ -50,7 +50,7 @@ def test_connection_profile_builds_frontend_tailscale_url(tmp_path: Path, monkey
     })
     profile = connectivity.connection_profile(settings)
     assert profile["tailscale"]["frontendServerUrl"] == "https://jarvis.example.ts.net/api/v1"
-    assert profile["local"]["frontendServerUrl"] == "http://127.0.0.1:8796/api/v1"
+    assert profile["local"]["frontendServerUrl"] == "http://127.0.0.1:9888/api/v1"
 
 
 def test_local_setup_generates_key_and_auth_uses_it_immediately(tmp_path: Path, monkeypatch):
