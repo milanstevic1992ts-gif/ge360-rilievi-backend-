@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GE360 · Collegamento backend</title>
+<style>
+body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{max-width:760px;margin:auto;padding:24px}.card{background:#111827;border:1px solid #273244;border-radius:18px;padding:18px;margin:14px 0}.row{display:flex;gap:10px;flex-wrap:wrap}.pill{padding:6px 10px;border-radius:999px;background:#1f2937}.ok{color:#86efac}.bad{color:#fca5a5}button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}button.primary{background:#2563eb;color:white}button.secondary{background:#374151;color:white}input,textarea{box-sizing:border-box;width:100%;background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px;font:inherit}code{word-break:break-all}.small{font-size:13px;color:#94a3b8}.hidden{display:none}
+</style>
+</head>
+<body><div class="wrap">
+<h1>GE360 · Collegamento backend</h1>
+<p class="small">Configurazione rapida per collegare GE360 Open Plan3D al backend Debian tramite Tailscale.</p>
+
+<div class="card">
+<h2>1 · Backend</h2>
+<div id="backendState">Caricamento…</div>
+</div>
+
+<div class="card">
+<h2>2 · Tailscale</h2>
+<div id="tailscaleState">Controllo…</div>
+<p class="small">Per configurare Tailscale Serve automaticamente sul server:</p>
+<textarea readonly rows="2">sudo bash scripts/setup-tailscale.sh</textarea>
+</div>
+
+<div class="card">
+<h2>3 · API key</h2>
+<p>La chiave viene mostrata solo quando viene generata o ruotata.</p>
+<button class="primary" id="generate">GENERA / RUOTA API KEY</button>
+<div id="keyBox" class="hidden">
+<p><strong>API key:</strong></p>
+<textarea id="apiKey" readonly rows="3"></textarea>
+<button class="secondary" data-copy="apiKey">COPIA API KEY</button>
+</div>
+</div>
+
+<div class="card">
+<h2>4 · Impostazioni frontend</h2>
+<label>Backend URL</label>
+<input id="serverUrl" readonly>
+<div class="row" style="margin-top:10px">
+<button class="secondary" data-copy="serverUrl">COPIA URL</button>
+<button class="secondary" id="refresh">AGGIORNA STATO</button>
+</div>
+<p class="small">Nel frontend inserisci questo URL e la API key generata sopra.</p>
+</div>
+
+<div id="message" class="small"></div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let profile=null;
+async function refresh(){
+  $('message').textContent='';
+  const r=await fetch('/api/v1/setup/status');
+  if(!r.ok){$('message').textContent='Setup disponibile direttamente da localhost oppure con una API key valida.';return}
+  profile=await r.json();
+  $('backendState').innerHTML='<span class="pill ok">Backend attivo</span> '+(profile.apiKeyConfigured?'<span class="pill ok">API key configurata</span>':'<span class="pill bad">API key mancante</span>');
+  const t=profile.tailscale;
+  $('tailscaleState').innerHTML=(t.installed?'<span class="pill ok">Installato</span>':'<span class="pill bad">Non installato</span>')+' '+(t.running?'<span class="pill ok">Connesso</span>':'<span class="pill bad">Non connesso</span>')+' '+(t.serveConfigured?'<span class="pill ok">Serve attivo</span>':'<span class="pill bad">Serve da configurare</span>')+(t.dnsName?'<p><code>'+t.dnsName+'</code></p>':'');
+  $('serverUrl').value=t.frontendServerUrl||profile.local.frontendServerUrl;
+}
+$('generate').onclick=async()=>{
+  const r=await fetch('/api/v1/setup/api-key',{method:'POST'});
+  if(!r.ok){$('message').textContent='Generazione consentita solo localmente oppure con autenticazione.';return}
+  const d=await r.json(); $('apiKey').value=d.apiKey; $('keyBox').classList.remove('hidden'); await refresh();
+};
+$('refresh').onclick=refresh;
+document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText($(b.dataset.copy).value);b.textContent='COPIATO ✓';setTimeout(()=>b.textContent=b.dataset.copy==='apiKey'?'COPIA API KEY':'COPIA URL',1200)});
+refresh();
+</script></body></html>
