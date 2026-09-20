@@ -5,7 +5,7 @@ import logging
 import secrets
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException
+from fastapi import Depends, FastAPI, Header, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -15,6 +15,7 @@ from backend.agent.notes import rewrite_note
 from backend.agent.ollama import OllamaClient
 
 from backend.config import get_settings
+from backend.connectivity import connection_profile, generate_runtime_api_key, read_runtime_api_key
 from backend.db import Database
 from backend.jobs import JobManager
 from backend.models import PlanPayload
@@ -28,12 +29,12 @@ db = Database(settings.db_path)
 pipeline = Pipeline(settings, storage, db)
 jobs = JobManager(pipeline, max_workers=settings.job_workers)
 
-if not settings.api_key:
-    logger.warning("GE360_API_KEY is empty: local/development API is running without authentication")
+if not read_runtime_api_key(settings):
+    logger.warning("GE360 API key is empty: local/development API is running without authentication")
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
-app = FastAPI(title="GE360 Rilievi Backend", version="1.2.0")
+app = FastAPI(title="GE360 Rilievi Backend", version="1.3.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -45,6 +46,10 @@ app.add_middleware(
 viewer_dir = Path(__file__).resolve().parents[1] / "viewer3d"
 if viewer_dir.is_dir():
     app.mount("/viewer3d", StaticFiles(directory=viewer_dir, html=True), name="viewer3d")
+
+setup_dir = Path(__file__).resolve().parents[1] / "setup"
+if setup_dir.is_dir():
+    app.mount("/setup", StaticFiles(directory=setup_dir, html=True), name="setup")
 
 ARTIFACTS: dict[str, tuple[str, str, bool]] = {
     "processed": ("processed-plan.json", "application/json", False),
@@ -58,10 +63,35 @@ ARTIFACTS: dict[str, tuple[str, str, bool]] = {
 
 
 def require_api_key(x_ge360_api_key: str | None = Header(default=None)) -> None:
-    if not settings.api_key:
+    api_key = read_runtime_api_key(settings)
+    if not api_key:
         return
-    if not x_ge360_api_key or not secrets.compare_digest(x_ge360_api_key, settings.api_key):
+    if not x_ge360_api_key or not secrets.compare_digest(x_ge360_api_key, api_key):
         raise HTTPException(status_code=401, detail="Invalid API key")
+
+
+def _direct_local_setup_request(request: Request) -> bool:
+    if request.headers.get("x-forwarded-for") or request.headers.get("forwarded"):
+        return False
+    request_host = (request.url.hostname or "").lower()
+    client_host = (request.client.host if request.client else "").lower()
+    loopback = {"127.0.0.1", "::1", "localhost"}
+    return request_host in loopback and client_host in loopback
+
+
+def require_setup_access(
+    request: Request,
+    x_ge360_api_key: str | None = Header(default=None),
+) -> None:
+    if _direct_local_setup_request(request):
+        return
+    api_key = read_runtime_api_key(settings)
+    if api_key and x_ge360_api_key and secrets.compare_digest(x_ge360_api_key, api_key):
+        return
+    raise HTTPException(
+        status_code=403,
+        detail="Setup is available directly from localhost or with a valid GE360 API key",
+    )
 
 
 def _record_or_404(plan_id: str) -> dict:
@@ -144,9 +174,29 @@ def health():
     return {
         "ok": True,
         "service": "ge360-rilievi-backend",
-        "version": "1.2.0",
+        "version": "1.3.0",
         "aiEnabled": settings.ai_enabled,
-        "apiKeyRequired": bool(settings.api_key),
+        "apiKeyRequired": bool(read_runtime_api_key(settings)),
+        "setupUrl": "/setup/",
+    }
+
+
+@app.get("/api/v1/setup/status", dependencies=[Depends(require_setup_access)])
+def setup_status():
+    return connection_profile(settings)
+
+
+@app.post("/api/v1/setup/api-key", dependencies=[Depends(require_setup_access)])
+def setup_generate_api_key():
+    key = generate_runtime_api_key(settings)
+    profile = connection_profile(settings)
+    return {
+        "ok": True,
+        "apiKey": key,
+        "shownOnce": True,
+        "frontendServerUrl": profile["tailscale"]["frontendServerUrl"]
+        or profile["local"]["frontendServerUrl"],
+        "profile": profile,
     }
 
 
