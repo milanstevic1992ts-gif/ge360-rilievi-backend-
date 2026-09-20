@@ -48,6 +48,11 @@ else
   echo "Installed systemd unit: $TARGET_SERVICE"
 fi
 
-echo "Install complete. Edit $APP_DIR/.env, then run:"
+echo "Install complete. Review $APP_DIR/.env, then run:"
 echo "  sudo systemctl enable --now $SERVICE_NAME"
 echo "  sudo systemctl status $SERVICE_NAME"
+echo
+echo "For guided Tailscale + frontend connection:"
+echo "  sudo bash $APP_DIR/scripts/setup-tailscale.sh"
+echo "Then open locally:"
+echo "  http://127.0.0.1:8796/setup/"
