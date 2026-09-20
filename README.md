@@ -178,3 +178,14 @@ La suite copre geometria A-K, diagonali, forma a L, muri condivisi, aperture, DX
 ## Dipendenze esterne
 
 Nessuna repository esterna è copiata interamente nel backend. Audit, commit analizzati e decisioni sono in `docs/third-party-audit.md`. `backend/third_party/` non contiene codice vendor nella V1.
+
+
+## Smoke test HTTP reale
+
+Oltre alla suite pytest, la repository contiene un test end-to-end che usa una vera istanza Uvicorn:
+
+```bash
+bash scripts/smoke-http.sh
+```
+
+Lo script usa una directory dati temporanea, non tocca i rilievi reali, invia il fixture v4 del frontend, attende la fine del job e verifica gli elaborati scaricabili. Viene eseguito anche da GitHub Actions.

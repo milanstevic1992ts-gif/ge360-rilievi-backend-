@@ -9,7 +9,7 @@ The current `ge360-open-plan3d` frontend sends payload **version 4**. Sketch coo
 3. Poll `GET /api/v1/jobs/{jobId}` or `GET /api/v1/plans/{planId}`. States are `RAW`, `QUEUED`, `PROCESSING`, `PROCESSED`, `NEEDS_REVIEW`, `ERROR`.
 4. Retrieve `processed`, `preview`, `png`, `svg`, `dxf`, `pdf` and `3d` once processing has completed.
 
-`POST /api/v1/plans/refine` remains as a compatibility route for the current frontend: it saves RAW and queues the same processing pipeline.
+`POST /api/v1/plans/refine` remains as the compatibility route for the current frontend: it saves RAW and queues the same processing pipeline. Its response already contains `statusUrl`, `jobUrl`, `versionsUrl` and `viewerUrl`, so the mobile client does not need to invent backend paths.
 
 ## Status response
 
@@ -30,6 +30,7 @@ The current `ge360-open-plan3d` frontend sends payload **version 4**. Sketch coo
     "dxf":"/api/v1/plans/plan-abc/dxf",
     "json":"/api/v1/plans/plan-abc/processed",
     "plan3d":"/api/v1/plans/plan-abc/3d",
+    "viewer":"/viewer3d/?plan=/api/v1/plans/plan-abc/3d",
     "glb":null
   }
 }
@@ -48,3 +49,29 @@ Allowed browser origins are configured with comma-separated `GE360_CORS_ORIGINS`
 ## 3D viewer
 
 The backend always produces independent `plan3d.json`. A minimal Three.js viewer is served from `/viewer3d/`; open it with `?plan=/api/v1/plans/PLAN_ID/3d`. It supports orbit, pan, zoom, top view, perspective and reset, and renders wall openings from the GE360 model.
+
+
+## Backend-first response for the mobile app
+
+A successful `POST /api/v1/plans/refine` returns immediately:
+
+```json
+{
+  "success": true,
+  "planId": "plan-abc",
+  "jobId": "uuid",
+  "status": "QUEUED",
+  "queued": true,
+  "currentVersion": 0,
+  "statusUrl": "/api/v1/plans/plan-abc",
+  "jobUrl": "/api/v1/jobs/uuid",
+  "versionsUrl": "/api/v1/plans/plan-abc/versions",
+  "viewerUrl": "/viewer3d/?plan=/api/v1/plans/plan-abc/3d"
+}
+```
+
+The frontend only needs to keep the API base URL and API key, submit the v4 payload, poll `statusUrl` or `jobUrl`, then use the file URLs returned by the status response.
+
+## Real HTTP smoke test
+
+`scripts/smoke-http.sh` starts a temporary Uvicorn instance, sends the same v4 fixture used by the frontend contract test, waits for the asynchronous job, downloads JSON/PNG/SVG/PDF/DXF/plan3d and validates the authoritative wall lengths plus the door width/offset. This script runs in CI in addition to pytest.

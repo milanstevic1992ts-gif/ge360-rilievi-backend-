@@ -33,7 +33,7 @@ if not settings.api_key:
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
-app = FastAPI(title="GE360 Rilievi Backend", version="1.1.0")
+app = FastAPI(title="GE360 Rilievi Backend", version="1.2.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -111,6 +111,7 @@ def _current_file_links(plan_id: str) -> dict[str, str | None]:
         "dxf": link("dxf"),
         "json": link("processed"),
         "plan3d": link("3d"),
+        "viewer": f"/viewer3d/?plan=/api/v1/plans/{plan_id}/3d" if (current / "plan3d.json").exists() else None,
         "glb": None,
     }
 
@@ -118,13 +119,18 @@ def _current_file_links(plan_id: str) -> dict[str, str | None]:
 def _queue_plan(plan_id: str) -> dict:
     row = _record_or_404(plan_id)
     submission = jobs.submit(plan_id)
+    job_id = submission["jobId"]
     return {
         "success": True,
         "planId": plan_id,
-        "jobId": submission["jobId"],
+        "jobId": job_id,
         "status": submission["status"],
         "queued": submission["created"],
         "currentVersion": row["current_version"],
+        "statusUrl": f"/api/v1/plans/{plan_id}",
+        "jobUrl": f"/api/v1/jobs/{job_id}" if job_id else None,
+        "versionsUrl": f"/api/v1/plans/{plan_id}/versions",
+        "viewerUrl": f"/viewer3d/?plan=/api/v1/plans/{plan_id}/3d",
     }
 
 
@@ -138,7 +144,7 @@ def health():
     return {
         "ok": True,
         "service": "ge360-rilievi-backend",
-        "version": "1.1.0",
+        "version": "1.2.0",
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(settings.api_key),
     }

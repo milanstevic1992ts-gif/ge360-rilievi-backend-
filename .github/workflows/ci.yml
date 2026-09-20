@@ -14,4 +14,5 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m compileall -q backend
       - run: pytest -q
+      - run: bash scripts/smoke-http.sh
       - run: bash -n scripts/install-debian.sh
