@@ -8,7 +8,7 @@ import pytest
 
 from backend.bridge.config import BridgeSettings
 from backend.bridge.manager import DirectBridgeManager
-from backend.bridge.network import PublicEndpoint, classify_external_ipv4, format_endpoint
+from backend.bridge.network import PublicEndpoint, classify_external_ipv4, format_endpoint, resolve_public_endpoint
 from backend.bridge.qr import wireguard_qr_png_base64
 from backend.bridge.store import BridgeStore
 from backend.bridge.wireguard import MANAGED_MARKER, WireGuardController, parse_wg_dump
@@ -73,6 +73,21 @@ def test_cgnat_detection_logic():
     assert classify_external_ipv4("10.1.2.3") == "NON_PUBLIC"
     assert classify_external_ipv4("8.8.8.8") == "PUBLIC"
     assert format_endpoint("2001:4860:4860::8888", 51820) == "[2001:4860:4860::8888]:51820"
+
+
+def test_configured_hostname_is_rejected_when_router_reports_cgnat(tmp_path: Path, monkeypatch):
+    from backend.bridge import network as network_module
+
+    s = settings(tmp_path)
+    monkeypatch.setattr(network_module.shutil, "which", lambda name: "/usr/bin/upnpc" if name == "upnpc" else None)
+
+    def runner(args, input_text, timeout):
+        assert args[:2] == ["/usr/bin/upnpc", "-s"]
+        return 0, "ExternalIPAddress = 100.64.12.9", ""
+
+    endpoint = resolve_public_endpoint(s, runner)
+    assert endpoint.available is False
+    assert endpoint.state_code == "REMOTE_ACCESS_UNAVAILABLE_CGNAT"
 
 
 def test_parse_wg_dump():

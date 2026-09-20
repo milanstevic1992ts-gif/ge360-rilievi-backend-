@@ -131,9 +131,11 @@ def resolve_public_endpoint(settings: BridgeSettings, runner: Runner = run_comma
     if settings.public_host:
         host = settings.public_host.strip().strip("[]")
         classification = classify_external_ipv4(host)
-        if classification in {"CGNAT", "NON_PUBLIC"}:
+        router_external_ip, _ = upnp_external_ipv4(runner)
+        router_classification = classify_external_ipv4(router_external_ip)
+        if classification in {"CGNAT", "NON_PUBLIC"} or router_classification in {"CGNAT", "NON_PUBLIC"}:
             return PublicEndpoint(
-                False, None, host, "configured", "REMOTE_ACCESS_UNAVAILABLE_CGNAT",
+                False, None, router_external_ip or host, "configured", "REMOTE_ACCESS_UNAVAILABLE_CGNAT",
                 "La rete non consente connessioni dirette in ingresso. È necessario un IP pubblico, IPv6 raggiungibile o un relay esterno.",
             )
         return PublicEndpoint(True, format_endpoint(host, settings.listen_port), host, "configured", "ENDPOINT_CONFIGURED")
