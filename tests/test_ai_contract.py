@@ -26,7 +26,7 @@ def fixture_plan(tmp_path,ambiguous=False):
     s.write_json_atomic(c/"processed-plan.json",plan);s.write_json_atomic(c/"manifest.json",{"version":3,"status":"PROCESSED"});return s,PlanContext(s,"ai-test")
 
 def test_registry_exact_and_safe():
-    assert set(REGISTRY.names)==EXPECTED and len(REGISTRY.names)==28
+    assert set(REGISTRY.names)==EXPECTED and len(REGISTRY.names)==27
     assert not any(x in " ".join(REGISTRY.names) for x in ("shell","python","sql","write_file","http_request","eval","exec"))
 
 def test_model_locked_and_schema_strict():
