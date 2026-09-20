@@ -8,6 +8,7 @@ from pathlib import Path
 from fastapi import Depends, FastAPI, Header, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agent.notes import rewrite_note
@@ -40,6 +41,10 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "X-GE360-API-Key"],
 )
+
+viewer_dir = Path(__file__).resolve().parents[1] / "viewer3d"
+if viewer_dir.is_dir():
+    app.mount("/viewer3d", StaticFiles(directory=viewer_dir, html=True), name="viewer3d")
 
 ARTIFACTS: dict[str, tuple[str, str, bool]] = {
     "processed": ("processed-plan.json", "application/json", False),

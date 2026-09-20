@@ -81,6 +81,8 @@ def test_fastapi_polling_versions_files_security_and_cors(tmp_path: Path, monkey
     import backend.main as main
     main = importlib.reload(main); client = TestClient(main.app); h = {"X-GE360-API-Key": "api-test"}
     assert client.get("/api/v1/health").status_code == 401
+    viewer = client.get("/viewer3d/")
+    assert viewer.status_code == 200 and "GE360 3D Viewer" in viewer.text
     assert client.post("/api/v1/plans", json=payload("api1"), headers=h).json()["status"] == "RAW"
     queued = client.post("/api/v1/plans/api1/process", headers=h).json()
     assert queued["status"] == "QUEUED" and wait_job(client, queued["jobId"], h)["status"] == "DONE"
