@@ -1,0 +1,14 @@
+[project]
+name = "ge360-rilievi-backend"
+version = "1.0.0"
+description = "Deterministic survey-to-CAD backend for GE360 Rilievo"
+requires-python = ">=3.12"
+
+[project.optional-dependencies]
+archit = ["archit-app>=0.7,<0.8"]
+glb = ["trimesh>=4.4"]
+
+[tool.pytest.ini_options]
+pythonpath = ["."]
+testpaths = ["tests"]
+addopts = "-ra"

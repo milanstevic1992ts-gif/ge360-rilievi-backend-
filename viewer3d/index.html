@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>GE360 3D Viewer</title>
+<style>
+html,body,#viewer{margin:0;width:100%;height:100%;overflow:hidden;background:#eef2f7;font-family:system-ui,sans-serif}.toolbar{position:fixed;z-index:5;left:12px;top:12px;display:flex;gap:8px;flex-wrap:wrap}.toolbar button{border:0;border-radius:10px;padding:10px 14px;background:#111827;color:white;font-weight:700;cursor:pointer}.status{position:fixed;z-index:5;right:12px;top:12px;max-width:min(360px,70vw);background:#fff;padding:8px 12px;border-radius:10px;box-shadow:0 4px 18px #0002}.status.error{color:#991b1b}.badge{position:fixed;z-index:5;left:12px;bottom:12px;background:#ffffffdd;padding:7px 10px;border-radius:9px;font-size:12px}
+</style>
+</head>
+<body>
+<div class="toolbar"><button id="top">TOP</button><button id="perspective">PROSPETTIVA</button><button id="reset">RESET</button></div>
+<div class="status" id="status">Caricamento plan3d.json…</div>
+<div class="badge">Orbit · pan · zoom · unità mm</div>
+<div id="viewer"></div>
+<script type="module">
+import * as THREE from 'https://cdn.jsdelivr.net/npm/three@0.182.0/build/three.module.js';
+import { OrbitControls } from 'https://cdn.jsdelivr.net/npm/three@0.182.0/examples/jsm/controls/OrbitControls.js';
+
+const host=document.querySelector('#viewer'), status=document.querySelector('#status');
+const scene=new THREE.Scene(); scene.background=new THREE.Color(0xeef2f7);
+const camera=new THREE.PerspectiveCamera(55,innerWidth/innerHeight,1,300000); camera.up.set(0,0,1);
+const renderer=new THREE.WebGLRenderer({antialias:true}); renderer.setPixelRatio(Math.min(devicePixelRatio,2)); host.append(renderer.domElement);
+const controls=new OrbitControls(camera,renderer.domElement); controls.enableDamping=true; controls.screenSpacePanning=true; controls.minDistance=100;
+scene.add(new THREE.HemisphereLight(0xffffff,0x64748b,2.0)); const sun=new THREE.DirectionalLight(0xffffff,2.2); sun.position.set(6000,-5000,9000); scene.add(sun);
+const grid=new THREE.GridHelper(30000,60,0xb6c2d1,0xd7dee8); grid.rotation.x=Math.PI/2; scene.add(grid);
+const planGroup=new THREE.Group(); scene.add(planGroup);
+const wallMat=new THREE.MeshStandardMaterial({color:0xf8fafc,roughness:.84});
+const floorMat=new THREE.MeshStandardMaterial({color:0xdde7f2,side:THREE.DoubleSide,roughness:.95});
+const glassMat=new THREE.MeshStandardMaterial({color:0x9bd5f5,transparent:true,opacity:.4,roughness:.2,metalness:.05});
+const doorMat=new THREE.MeshStandardMaterial({color:0xcaa57a,roughness:.8});
+let bounds=new THREE.Box3(), center=new THREE.Vector3(), loadedPlan=null;
+
+function addWallSegment(w,a,b,z0,z1,material=wallMat){
+  const len=b-a, h=z1-z0; if(len<=.1||h<=.1)return;
+  const dx=w.end[0]-w.start[0],dy=w.end[1]-w.start[1],angle=Math.atan2(dy,dx),mid=(a+b)/2;
+  const mesh=new THREE.Mesh(new THREE.BoxGeometry(len,w.thickness,h),material);
+  mesh.position.set(w.start[0]+Math.cos(angle)*mid,w.start[1]+Math.sin(angle)*mid,(z0+z1)/2); mesh.rotation.z=angle; mesh.userData.wallId=w.id; planGroup.add(mesh);
+}
+function openingRanges(p,wall){
+  const list=[...(p.doors||[]),...(p.windows||[])].filter(o=>o.wallId===wall.id);
+  return list.map(o=>{const center=Number(o.centerFromStart??(o.offset+o.width/2));const bottom=Number(o.sillHeight??0);return {...o,start:Math.max(0,center-o.width/2),end:Math.min(wall.length,center+o.width/2),bottom,top:Math.min(wall.height,bottom+o.height)}}).filter(o=>o.end>o.start);
+}
+function addWall(p,w){
+  const openings=openingRanges(p,w),cuts=[0,w.length]; openings.forEach(o=>cuts.push(o.start,o.end)); cuts.sort((a,b)=>a-b);
+  const uniq=cuts.filter((v,i)=>i===0||Math.abs(v-cuts[i-1])>.01);
+  for(let i=0;i<uniq.length-1;i++){const a=uniq[i],b=uniq[i+1],mid=(a+b)/2,cover=openings.filter(o=>o.start<=mid&&o.end>=mid);
+    if(!cover.length){addWallSegment(w,a,b,0,w.height);continue}
+    const bottom=Math.min(...cover.map(o=>o.bottom)),top=Math.max(...cover.map(o=>o.top)); if(bottom>0)addWallSegment(w,a,b,0,bottom); if(top<w.height)addWallSegment(w,a,b,top,w.height);
+  }
+  const dx=w.end[0]-w.start[0],dy=w.end[1]-w.start[1],angle=Math.atan2(dy,dx);
+  openings.forEach(o=>{const center=(o.start+o.end)/2,cx=w.start[0]+Math.cos(angle)*center,cy=w.start[1]+Math.sin(angle)*center;
+    const depth=Math.max(8,w.thickness*.22),mat=o.sillHeight!==undefined?glassMat:doorMat; const pane=new THREE.Mesh(new THREE.BoxGeometry(o.width,depth,Math.max(20,o.height)),mat); pane.position.set(cx,cy,o.bottom+o.height/2); pane.rotation.z=angle; planGroup.add(pane);
+  });
+}
+function addFloor(room){if(!room.polygon?.length)return;const shape=new THREE.Shape();room.polygon.forEach(([x,y],i)=>i?shape.lineTo(x,y):shape.moveTo(x,y));const mesh=new THREE.Mesh(new THREE.ShapeGeometry(shape),floorMat);mesh.position.z=1;mesh.userData.roomId=room.id;planGroup.add(mesh)}
+function clearPlan(){while(planGroup.children.length){const o=planGroup.children[0];planGroup.remove(o);o.geometry?.dispose()}}
+function fit(mode='perspective'){bounds.setFromObject(planGroup);if(bounds.isEmpty())return;bounds.getCenter(center);const size=bounds.getSize(new THREE.Vector3()),span=Math.max(size.x,size.y,2500);controls.target.copy(center);if(mode==='top')camera.position.set(center.x,center.y,Math.max(size.z+2500,span*1.45));else camera.position.set(center.x+span,center.y-span,Math.max(size.z+900,span*.8));camera.lookAt(center);controls.update()}
+function loadPlan(p){loadedPlan=p;clearPlan();(p.walls||[]).forEach(w=>addWall(p,w));(p.rooms||[]).forEach(addFloor);fit('perspective');status.classList.remove('error');status.textContent=(p.name||p.planId||'GE360')+' · '+(p.rooms||[]).length+' ambienti · '+(p.walls||[]).length+' muri'}
+function apiHeaders(){const key=sessionStorage.getItem('ge360ApiKey');return key?{'X-GE360-API-Key':key}:{}}
+async function boot(){const params=new URLSearchParams(location.search),url=params.get('plan');if(!url){status.textContent='Usa ?plan=/api/v1/plans/ID/3d';return}try{let r=await fetch(url,{headers:apiHeaders()});if(r.status===401){const key=prompt('X-GE360-API-Key');if(key){sessionStorage.setItem('ge360ApiKey',key);r=await fetch(url,{headers:apiHeaders()})}}if(!r.ok)throw new Error('HTTP '+r.status);loadPlan(await r.json())}catch(e){status.classList.add('error');status.textContent='Errore viewer: '+e.message}}
+document.querySelector('#top').onclick=()=>fit('top');document.querySelector('#perspective').onclick=()=>fit('perspective');document.querySelector('#reset').onclick=()=>fit('perspective');
+function resize(){renderer.setSize(innerWidth,innerHeight);camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix()}addEventListener('resize',resize);resize();(function loop(){controls.update();renderer.render(scene,camera);requestAnimationFrame(loop)})();boot();
+</script>
+</body></html>
