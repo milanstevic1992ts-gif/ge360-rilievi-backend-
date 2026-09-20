@@ -10,8 +10,7 @@ def to_archlang(plan:PlanModel)->str:
     for r in plan.rooms:
         lines.append(f'  # room {r.roomId} "{r.name}" area_m2={r.floorAreaM2:.3f}')
     lines.append('}')
-    return "
-".join(lines)
+    return "\n".join(lines)
 
 def integration_status()->dict:
     return {"runtime":"NOT_USED_V1","reason":"JSON tool-calling is simpler and keeps Python backend independent; adapter retained for future Node worker."}
