@@ -117,7 +117,7 @@ class CandidateService:
         self.storage.write_json_atomic(out/"source-plan.json",s);self.storage.write_json_atomic(out/"processed-plan.json",model.model_dump(mode="json"));dx=export_dxf(model,out/"plan.dxf");export_svg(model,out/"plan.svg");export_png(model,out/"preview.png");export_pdf(model,out/"plan.pdf");self.storage.write_json_atomic(out/"plan3d.json",to_plan3d(model));return model,val,quality,dx
     def _diff(self,b,a):
         def d(kind,key):
-            x={str(v[key]):v for v in b.get(kind,[]) if key in v};y={str(v[key]):v for v in a.get(kind,[]) if key in v};return {"added":sorted(y.keys()-x.keys()),"deleted":sorted(x.keys()-y.keys())}
+            x={str(v[key]):v for v in b.get(kind,[]) if key in v};y={str(v[key]):v for v in a.get(kind,[]) if key in v};return {"added":sorted(y.keys()-x.keys()),"deleted":sorted(x.keys()-y.keys()),"modified":sorted(k for k in x.keys()&y.keys() if x[k]!=y[k])}
         return {"walls":d("walls","id"),"openings":d("openings","id"),"notesChanged":b.get("notes",[])!=a.get("notes",[]),"roomsChanged":b.get("rooms",[])!=a.get("rooms",[])}
     def prepare(self,pid,cmd,instruction=None):
         c=PlanContext(self.storage,pid);s=copy.deepcopy(self._source(pid));s["planId"]=pid;operr=[];applied=[]
