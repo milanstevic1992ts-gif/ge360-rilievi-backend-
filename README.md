@@ -51,7 +51,7 @@ cp .env.example .env
 set -a
 source .env
 set +a
-uvicorn backend.main:app --host 127.0.0.1 --port 8796
+uvicorn backend.main:app --host 127.0.0.1 --port 9888
 ```
 
 Con `GE360_API_KEY=` vuoto l'API parte in modalità sviluppo e registra un warning. In installazione reale impostare una chiave, per esempio:
@@ -62,7 +62,7 @@ openssl rand -hex 32
 
 ## Collegamento facile con Tailscale
 
-Il backend resta in ascolto su `127.0.0.1:8796` e può essere pubblicato privatamente nel tailnet tramite Tailscale Serve.
+Il backend resta in ascolto su `127.0.0.1:9888` e può essere pubblicato privatamente nel tailnet tramite Tailscale Serve.
 
 Dopo l'installazione:
 
@@ -80,7 +80,7 @@ API key     : <chiave-generata>
 È disponibile anche la pagina locale:
 
 ```text
-http://127.0.0.1:8796/setup/
+http://127.0.0.1:9888/setup/
 ```
 
 Da qui si vedono stato Tailscale, MagicDNS/Serve, URL frontend e si può generare o ruotare la API key. La chiave generata è salvata fuori dalla repository in `GE360_API_KEY_FILE` (default `/opt/ge360/data/rilievi/.api-key`) con permessi 0600 e diventa valida immediatamente, senza riavviare Uvicorn.
@@ -96,7 +96,7 @@ sudo systemctl enable --now ge360-rilievi-backend.service
 sudo systemctl status ge360-rilievi-backend.service
 ```
 
-Il template systemd usa `User=jarvis`, bind `127.0.0.1:8796` e storage `/opt/ge360/data/rilievi`. Se l'host usa un altro utente, adattare l'unit prima dell'avvio.
+Il template systemd usa `User=jarvis`, bind `127.0.0.1:9888` e storage `/opt/ge360/data/rilievi`. Se l'host usa un altro utente, adattare l'unit prima dell'avvio.
 
 ## Docker
 
@@ -105,7 +105,7 @@ cp .env.example .env
 docker compose up -d --build
 ```
 
-La porta viene pubblicata solo su `127.0.0.1:8796` e i dati persistono in `./local-data`.
+La porta viene pubblicata solo su `127.0.0.1:9888` e i dati persistono in `./local-data`.
 
 ## ENV principali
 
@@ -115,7 +115,7 @@ GE360_API_KEY_FILE=/opt/ge360/data/rilievi/.api-key
 GE360_DATA_DIR=/opt/ge360/data/rilievi
 GE360_DB_PATH=/opt/ge360/data/rilievi/ge360-rilievi.sqlite3
 GE360_HOST=127.0.0.1
-GE360_PORT=8796
+GE360_PORT=9888
 GE360_CORS_ORIGINS=http://localhost,http://127.0.0.1,https://localhost,capacitor://localhost
 GE360_JOB_WORKERS=2
 GE360_DEFAULT_WALL_THICKNESS_MM=120
@@ -191,7 +191,7 @@ Il runtime V1 usa per default `qwen3:8b` via Ollama. Il manuale operativo versio
 Dopo aver processato un piano:
 
 ```text
-http://127.0.0.1:8796/viewer3d/?plan=/api/v1/plans/PLAN_ID/3d
+http://127.0.0.1:9888/viewer3d/?plan=/api/v1/plans/PLAN_ID/3d
 ```
 
 Il viewer usa `plan3d.json`, renderizza muri, pavimenti e aperture porta/finestra ed è indipendente dall'applicazione openPlan3D.
