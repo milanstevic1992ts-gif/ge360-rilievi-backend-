@@ -93,6 +93,10 @@ class Pipeline:
                 "accepted": [],
                 "rejected": [],
                 "offline": False,
+                "instructionVersion": None,
+                "repairBudget": 0.30,
+                "assessment": {},
+                "missingCapabilities": [],
             }
             score_before = None
             if self.settings.ai_enabled and solved.needs_review:
@@ -128,6 +132,10 @@ class Pipeline:
                         "accepted": run.accepted,
                         "rejected": run.rejected,
                         "offline": run.offline,
+                        "instructionVersion": run.instruction_version,
+                        "repairBudget": run.repair_budget,
+                        "assessment": run.assessment,
+                        "missingCapabilities": run.missing_capabilities,
                     }
                 except Exception as exc:
                     agent_log.update(
@@ -206,6 +214,10 @@ class Pipeline:
                     "inputHash": input_hash,
                     "solverOperations": solved.operations,
                     "aiAvailable": agent_log["aiAvailable"],
+                    "aiInstructionVersion": agent_log.get("instructionVersion"),
+                    "aiRepairBudget": agent_log.get("repairBudget"),
+                    "aiAssessment": agent_log.get("assessment"),
+                    "aiMissingCapabilities": agent_log.get("missingCapabilities"),
                     "aiProposals": agent_log["proposals"],
                     "acceptedOperations": agent_log["accepted"],
                     "rejectedOperations": agent_log["rejected"],
