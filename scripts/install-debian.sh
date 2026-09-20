@@ -55,4 +55,4 @@ echo
 echo "For guided Tailscale + frontend connection:"
 echo "  sudo bash $APP_DIR/scripts/setup-tailscale.sh"
 echo "Then open locally:"
-echo "  http://127.0.0.1:8796/setup/"
+echo "  http://127.0.0.1:9888/setup/"
