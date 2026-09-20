@@ -97,7 +97,7 @@ GE360_ORTHOGONAL_TOLERANCE_DEG=25
 GE360_LENGTH_TOLERANCE_MM=0.5
 GE360_AI_ENABLED=false
 GE360_OLLAMA_URL=http://127.0.0.1:11434
-GE360_OLLAMA_MODEL=qwen2.5:7b
+GE360_OLLAMA_MODEL=qwen3:8b
 GE360_OLLAMA_TIMEOUT=20
 ```
 
@@ -155,6 +155,8 @@ Ogni versione contiene `manifest.json` con stato, date, qualità, summary, hash 
 La pipeline deterministica non dipende da Ollama. Con `GE360_AI_ENABLED=false` l'agente non viene usato. Se è attivo ma Ollama non risponde, l'elaborazione continua e registra `aiAvailable=false`.
 
 L'agente non può creare direttamente coordinate o sostituire `walls`. Propone solo tool GE360; ogni candidato passa snapshot, controllo misure/aperture/topologia, nuovo solve, validation e score. Se non migliora o altera dati autorevoli viene scartato.
+
+Il runtime V1 usa per default `qwen3:8b` via Ollama. Il manuale operativo versionato è in `backend/agent/instructions/handbook.md`, con esempi few-shot in `backend/agent/examples/geometry-cases.json`. L'agente ha libertà strategica e un repair budget indicativo del 30% per correggere autonomamente problemi parziali, ma non può inventare misure autorevoli. Capability mancanti vengono riportate come `missingCapabilities` invece di essere simulate con coordinate inventate.
 
 ## Viewer 3D
 
