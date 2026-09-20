@@ -1,95 +1,95 @@
 # GE360 Rilievi Backend
 
-Backend Python/FastAPI che trasforma il rilievo rapido prodotto da ge360-open-plan3d in una geometria metrica verificabile, planimetria tecnica 2D, file CAD e modello 3D.
+Backend Python/FastAPI per trasformare il rilievo rapido di `ge360-open-plan3d` in una geometria metrica verificabile e in elaborati tecnici versionati.
 
-La regola centrale è non negoziabile: le misure inserite dall'utente sono autorevoli; lo schizzo è indicativo. Il backend può sistemare topologia, angoli, parallelismi e piccoli gap, ma non modifica di nascosto lengthCm, widthCm, offsetCm o altre misure dichiarate.
+Regola centrale: **le misure dichiarate dall'utente sono autorevoli**. Il backend può correggere topologia, piccoli gap e vincoli geometrici, ma non modifica `declaredLengthMm`, larghezze/offset delle aperture o altre misure utente per forzare la chiusura.
 
-## Base v1 implementata
+## Stato V1 sulla branch `feature/deterministic-pipeline-v1`
 
-- FastAPI con autenticazione X-GE360-API-Key.
-- Compatibilità con payload frontend v4 e POST /api/v1/plans/refine.
-- Storage RAW immutabile più versioni.
-- SQLite per indice e stato.
-- Normalizzazione interna in millimetri.
-- Topology graph NetworkX.
-- Solver deterministico SciPy.
-- Riconoscimento ambienti con Shapely.
-- Preservazione metrica di porte e finestre.
-- processed-plan.json, SVG, DXF, PNG e PDF.
-- plan3d.json e GLB.
-- Worker interno non bloccante sostituibile in futuro con RQ/Celery.
-- Agente Ollama opzionale, vincolato da validation e rollback.
-- Telegram opzionale.
-- Viewer Three.js minimale con orbit, pan, zoom, top view, prospettiva e reset.
-- Installazione Debian nativa, systemd e Docker.
-- Test A-K, 3D, API e artefatti.
+Implementato e coperto da test:
 
-## Architettura
+- payload frontend v4 e compatibilità `POST /api/v1/plans/refine`;
+- RAW originale immutabile più snapshot successivi;
+- SQLite per stato e indice;
+- stati `RAW`, `QUEUED`, `PROCESSING`, `PROCESSED`, `NEEDS_REVIEW`, `ERROR`;
+- worker interno `ThreadPoolExecutor` con deduplica per `planId`;
+- normalizzazione mm, topologia NetworkX, solver SciPy, stanze Shapely;
+- agente Ollama **opzionale**, solo tool calling, massimo 5 iterazioni, validation/rollback;
+- fallback completo quando Ollama non è disponibile;
+- output reali `processed-plan.json`, `plan.dxf`, `plan.svg`, `preview.png`, `plan.pdf`, `plan3d.json`;
+- versioni `001`, `002`, ... e accesso ai vecchi elaborati;
+- API key opzionale in sviluppo e obbligatoria quando `GE360_API_KEY` è valorizzata;
+- CORS configurabile via ENV;
+- viewer Three.js minimale su `/viewer3d/` con orbit, pan, zoom, top, perspective e reset;
+- adapter opzionali per archit-app/openPlan3D; ArchLang è esplicitamente `NOT_USED_V1`;
+- systemd, Docker e CI GitHub Actions.
 
-GE360 Android/Web -> FastAPI -> RAW storage -> normalizer -> topology graph -> deterministic geometry solver -> optional constrained AI agent -> validator + geometry score -> single PlanModel -> JSON/SVG/DXF/PNG/PDF + plan3d/GLB -> versioned storage -> frontend/Telegram.
+**Non inclusi nel percorso V1:** Telegram e generazione GLB. `GET /api/v1/plans/{planId}/glb` restituisce 404 intenzionalmente. `plan3d.json` è il formato 3D autorevole per questa fase.
 
-Dettagli in docs/architecture.md.
+## Flusso frontend
 
-## Requisiti Debian
+```text
+GE360 OPEN PLAN3D
+  -> POST /api/v1/plans
+  -> POST /api/v1/plans/{planId}/process
+  -> QUEUED + jobId
+  -> polling job/status
+  -> solver/validator/export
+  -> current + versions/NNN
+  -> 2D / 3D / PDF / DXF / PNG / SVG / JSON
+```
 
-Debian 12/13, Python 3.12+, python3-venv e rsync. Ollama è necessario solo se si abilita l'agente IA o la riscrittura appunti.
+Contratto completo: `docs/frontend-api.md`.
 
-## Installazione nativa
+## Avvio locale
 
-Clonare la repository, entrare nella cartella e avviare:
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements-dev.txt
+cp .env.example .env
+set -a
+source .env
+set +a
+uvicorn backend.main:app --host 127.0.0.1 --port 8796
+```
 
-    sudo bash scripts/install-debian.sh
+Con `GE360_API_KEY=` vuoto l'API parte in modalità sviluppo e registra un warning. In installazione reale impostare una chiave, per esempio:
 
-Lo script:
-- crea /opt/ge360/ge360-rilievi-backend;
-- crea il virtualenv;
-- installa requirements.txt;
-- crea /opt/ge360/data/rilievi;
-- copia .env.example in .env solo se .env non esiste;
-- non sovrascrive una unit systemd già presente.
+```bash
+openssl rand -hex 32
+```
 
-Poi modificare:
+## Installazione Debian/systemd
 
-    sudo nano /opt/ge360/ge360-rilievi-backend/.env
+```bash
+sudo bash scripts/install-debian.sh
+sudo nano /opt/ge360/ge360-rilievi-backend/.env
+sudo systemctl enable --now ge360-rilievi-backend.service
+sudo systemctl status ge360-rilievi-backend.service
+```
 
-Generare una chiave:
-
-    openssl rand -hex 32
-
-Inserire la chiave in GE360_API_KEY e avviare:
-
-    sudo systemctl enable --now ge360-rilievi-backend.service
-    sudo systemctl status ge360-rilievi-backend.service
-
-Bind predefinito: 127.0.0.1:8796.
-
-Il template systemd usa User=jarvis e Group=jarvis. Se il server usa un utente diverso, modificarli prima dell'avvio.
-
-## Avvio manuale
-
-    python3 -m venv .venv
-    source .venv/bin/activate
-    pip install -r requirements.txt
-    cp .env.example .env
-    set -a
-    source .env
-    set +a
-    uvicorn backend.main:app --host 127.0.0.1 --port 8796
+Il template systemd usa `User=jarvis`, bind `127.0.0.1:8796` e storage `/opt/ge360/data/rilievi`. Se l'host usa un altro utente, adattare l'unit prima dell'avvio.
 
 ## Docker
 
-Docker è alternativo, non obbligatorio.
+```bash
+cp .env.example .env
+docker compose up -d --build
+```
 
-    cp .env.example .env
-    docker compose up -d --build
+La porta viene pubblicata solo su `127.0.0.1:8796` e i dati persistono in `./local-data`.
 
 ## ENV principali
 
+```text
 GE360_API_KEY=
 GE360_DATA_DIR=/opt/ge360/data/rilievi
 GE360_DB_PATH=/opt/ge360/data/rilievi/ge360-rilievi.sqlite3
 GE360_HOST=127.0.0.1
 GE360_PORT=8796
+GE360_CORS_ORIGINS=http://localhost,http://127.0.0.1,https://localhost,capacitor://localhost
+GE360_JOB_WORKERS=2
 GE360_DEFAULT_WALL_THICKNESS_MM=120
 GE360_DEFAULT_WALL_HEIGHT_MM=2700
 GE360_SNAP_TOLERANCE_MM=250
@@ -99,110 +99,82 @@ GE360_AI_ENABLED=false
 GE360_OLLAMA_URL=http://127.0.0.1:11434
 GE360_OLLAMA_MODEL=qwen2.5:7b
 GE360_OLLAMA_TIMEOUT=20
-GE360_TELEGRAM_ENABLED=false
-GE360_TELEGRAM_BOT_TOKEN=
-GE360_TELEGRAM_CHAT_ID=
-GE360_PUBLIC_BASE_URL=
+```
 
-Nessun token o secret è incluso nella repository. .env è ignorato da Git.
+Nessun secret è committato; `.env` è ignorato da Git.
 
-## Ollama
+## API V1
 
-La geometria deterministica non dipende da Ollama. Con GE360_AI_ENABLED=false tutta la pipeline resta operativa.
+Quando `GE360_API_KEY` è valorizzata, inviare:
 
-Se abilitato, l'agente può soltanto proporre vincoli da una lista chiusa. Ogni proposta viene ricalcolata e rifiutata se modifica una misura, produce una geometria invalida o non migliora il geometry score. Massimo 5 iterazioni. Il modello predefinito è qwen2.5:7b.
+```text
+X-GE360-API-Key: <key>
+```
 
-## Telegram
+Endpoint principali:
 
-Configurazione solo via .env. Il notifier invia un riepilogo e, quando disponibili, preview.png, plan.pdf e plan.dxf. Un errore Telegram non modifica lo stato dell'elaborazione.
+- `GET /api/v1/health`
+- `POST /api/v1/plans`
+- `POST /api/v1/plans/refine`
+- `POST /api/v1/plans/{planId}/process`
+- `POST /api/v1/plans/{planId}/reprocess`
+- `GET /api/v1/jobs/{jobId}`
+- `GET /api/v1/plans/{planId}`
+- `GET /api/v1/plans/{planId}/processed`
+- `GET /api/v1/plans/{planId}/preview`
+- `GET /api/v1/plans/{planId}/png`
+- `GET /api/v1/plans/{planId}/svg`
+- `GET /api/v1/plans/{planId}/dxf`
+- `GET /api/v1/plans/{planId}/pdf`
+- `GET /api/v1/plans/{planId}/3d`
+- `GET /api/v1/plans/{planId}/versions`
+- `GET /api/v1/plans/{planId}/versions/{version}`
+- `GET /api/v1/plans/{planId}/versions/{version}/{artifact}`
+- `POST /api/v1/notes/rewrite`
 
-## API
-
-Header richiesto per /api/v1/*:
-
-    X-GE360-API-Key: <key>
-
-Endpoint:
-
-- GET /api/v1/health
-- POST /api/v1/plans
-- POST /api/v1/plans/refine
-- POST /api/v1/plans/{planId}/process
-- POST /api/v1/plans/{planId}/reprocess
-- GET /api/v1/jobs/{jobId}
-- GET /api/v1/plans/{planId}
-- GET /api/v1/plans/{planId}/processed
-- GET /api/v1/plans/{planId}/preview
-- GET /api/v1/plans/{planId}/svg
-- GET /api/v1/plans/{planId}/dxf
-- GET /api/v1/plans/{planId}/pdf
-- GET /api/v1/plans/{planId}/3d
-- GET /api/v1/plans/{planId}/glb
-- GET /api/v1/plans/{planId}/versions
-- POST /api/v1/notes/rewrite
-
-Il contratto frontend esatto è in docs/frontend-api.md.
-
-## Esempio rapido
-
-Salvare un RAW con POST /api/v1/plans, quindi avviare la processazione con:
-
-    curl -X POST http://127.0.0.1:8796/api/v1/plans/demo-2x3/process -H 'X-GE360-API-Key: YOUR_KEY'
-
-Leggere lo stato con:
-
-    curl http://127.0.0.1:8796/api/v1/plans/demo-2x3 -H 'X-GE360-API-Key: YOUR_KEY'
-
-Il frontend esistente può continuare a usare POST /api/v1/plans/refine: il backend salva il RAW e restituisce subito jobId e PROCESSING.
+`POST /process` e `/reprocess` non bloccano fino alla fine: restituiscono `QUEUED` e un `jobId`. Una seconda richiesta sullo stesso piano mentre esiste un job attivo non crea un worker concorrente.
 
 ## Storage
 
-Per ogni planId:
+Per ogni `planId`:
 
-- raw/original.json: primo payload, immutabile.
-- raw/latest.json: payload più recente.
-- raw/received-*.json: invii successivi immutabili.
-- current/: ultima versione pubblicata.
-- versions/001, 002, ...: elaborazioni precedenti.
-- logs/processing.jsonl: hash input, solver operations, proposte IA accettate/rifiutate, score, tempi, warning ed errori.
+```text
+raw/original.json        # primo payload, immutabile
+raw/latest.json
+raw/received-*.json      # invii successivi
+current/                 # ultima versione pubblicata
+versions/001/
+versions/002/
+logs/processing.jsonl
+```
 
-I file grandi restano sul filesystem; SQLite memorizza stato e metadati.
+Ogni versione contiene `manifest.json` con stato, date, qualità, summary, hash input, file e stato AI.
 
-## Test
+## Ollama
 
-Installare le dipendenze di sviluppo ed eseguire:
+La pipeline deterministica non dipende da Ollama. Con `GE360_AI_ENABLED=false` l'agente non viene usato. Se è attivo ma Ollama non risponde, l'elaborazione continua e registra `aiAvailable=false`.
 
-    pip install -r requirements-dev.txt
-    pytest -q
-
-La suite copre:
-- A: rettangolo 2x3 = 6 m²;
-- B: rettangolo disegnato storto;
-- C: piccoli gap;
-- D: diagonale reale;
-- E: porta 80 cm, offset 120 cm;
-- F: finestra;
-- G: forma a L;
-- H: due stanze con muro condiviso;
-- I: tre ambienti;
-- J: misure incompatibili -> NEEDS_REVIEW senza alterazione;
-- K: schizzo molto sproporzionato;
-- stanza 2x3 in 3D;
-- lettura reale JSON/SVG/DXF/PNG/PDF/GLB;
-- API key, polling, versioni e compatibilità /plans/refine.
+L'agente non può creare direttamente coordinate o sostituire `walls`. Propone solo tool GE360; ogni candidato passa snapshot, controllo misure/aperture/topologia, nuovo solve, validation e score. Se non migliora o altera dati autorevoli viene scartato.
 
 ## Viewer 3D
 
-viewer/index.html usa Three.js e OrbitControls. Il parametro glb può puntare a /api/v1/plans/<planId>/glb.
+Dopo aver processato un piano:
 
-## Dipendenze esterne studiate
+```text
+http://127.0.0.1:8796/viewer3d/?plan=/api/v1/plans/PLAN_ID/3d
+```
 
-archit-app e openPlan3D sono stati valutati con licenza MIT. Non vengono copiati nel core. La decisione è documentata in docs/dependency-decisions.md. FreeCAD/OpenCascade restano opzionali per evoluzioni CAD/BIM future.
+Il viewer usa `plan3d.json`, renderizza muri, pavimenti e aperture porta/finestra ed è indipendente dall'applicazione openPlan3D.
 
-## Troubleshooting
+## Test
 
-401 Invalid API key: controllare GE360_API_KEY e l'header.
-503 GE360_API_KEY not configured: impostare la chiave e riavviare.
-NEEDS_REVIEW: leggere current/processed-plan.json e logs/processing.jsonl; il backend non ha trovato una soluzione coerente senza violare misure/vincoli.
-GLB 404: GLB è opzionale; JSON e output 2D restano validi.
-Ollama non raggiungibile: disabilitare GE360_AI_ENABLED o avviare Ollama; la pipeline deterministica continua comunque.
+```bash
+pip install -r requirements-dev.txt
+pytest -q
+```
+
+La suite copre geometria A-K, diagonali, forma a L, muri condivisi, aperture, DXF riaperto con ezdxf, SVG/PNG/PDF/plan3d, RAW immutabile, versioning, job async/deduplica, API key/CORS, vecchie versioni, fallback Ollama, adapter e viewer. La stessa suite gira in `.github/workflows/ci.yml` su Python 3.12.
+
+## Dipendenze esterne
+
+Nessuna repository esterna è copiata interamente nel backend. Audit, commit analizzati e decisioni sono in `docs/third-party-audit.md`. `backend/third_party/` non contiene codice vendor nella V1.
