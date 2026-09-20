@@ -13,6 +13,8 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agent.notes import rewrite_note
 from backend.agent.ollama import OllamaClient
+from backend.bridge import BridgeSettings, BridgeUnavailable, DirectBridgeManager
+from backend.bridge.schemas import CreateBridgeDeviceRequest
 
 from backend.config import get_settings
 from backend.connectivity import connection_profile, generate_runtime_api_key, read_runtime_api_key
@@ -28,6 +30,7 @@ storage = PlanStorage(settings.data_dir)
 db = Database(settings.db_path)
 pipeline = Pipeline(settings, storage, db)
 jobs = JobManager(pipeline, max_workers=settings.job_workers)
+_bridge_manager: DirectBridgeManager | None = None
 
 if not read_runtime_api_key(settings):
     logger.warning("GE360 API key is empty: local/development API is running without authentication")
@@ -39,7 +42,7 @@ app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
     allow_credentials=False,
-    allow_methods=["GET", "POST", "OPTIONS"],
+    allow_methods=["GET", "POST", "DELETE", "OPTIONS"],
     allow_headers=["Content-Type", "X-GE360-API-Key"],
 )
 
@@ -92,6 +95,35 @@ def require_setup_access(
         status_code=403,
         detail="Setup is available directly from localhost or with a valid GE360 API key",
     )
+
+
+def get_bridge_manager() -> DirectBridgeManager:
+    global _bridge_manager
+    if _bridge_manager is not None:
+        return _bridge_manager
+    try:
+        _bridge_manager = DirectBridgeManager(BridgeSettings.from_env(settings.port))
+        return _bridge_manager
+    except (OSError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "BRIDGE_STORAGE_UNAVAILABLE", "message": str(exc)},
+        ) from exc
+
+
+def _bridge_call(action):
+    try:
+        return action()
+    except BridgeUnavailable as exc:
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail={"code": exc.code, "message": exc.message},
+        ) from exc
+    except (OSError, RuntimeError, ValueError) as exc:
+        raise HTTPException(
+            status_code=503,
+            detail={"code": "BRIDGE_OPERATION_FAILED", "message": str(exc)},
+        ) from exc
 
 
 def _record_or_404(plan_id: str) -> dict:
@@ -198,6 +230,62 @@ def setup_generate_api_key():
         or profile["local"]["frontendServerUrl"],
         "profile": profile,
     }
+
+
+@app.get("/api/v1/bridge/status", dependencies=[Depends(require_setup_access)])
+def bridge_status():
+    return _bridge_call(lambda: get_bridge_manager().status())
+
+
+@app.post("/api/v1/bridge/devices", dependencies=[Depends(require_setup_access)])
+def bridge_create_device(payload: CreateBridgeDeviceRequest):
+    return _bridge_call(lambda: get_bridge_manager().create_device(payload.name))
+
+
+@app.get("/api/v1/bridge/devices", dependencies=[Depends(require_setup_access)])
+def bridge_devices():
+    return _bridge_call(lambda: get_bridge_manager().list_devices())
+
+
+@app.get("/api/v1/bridge/devices/{device_id}", dependencies=[Depends(require_setup_access)])
+def bridge_device(device_id: str):
+    device = _bridge_call(lambda: get_bridge_manager().get_device(device_id))
+    if not device:
+        raise HTTPException(status_code=404, detail="Bridge device not found")
+    return device
+
+
+@app.delete("/api/v1/bridge/devices/{device_id}", dependencies=[Depends(require_setup_access)])
+@app.post("/api/v1/bridge/devices/{device_id}/revoke", dependencies=[Depends(require_setup_access)])
+def bridge_revoke_device(device_id: str):
+    device = _bridge_call(lambda: get_bridge_manager().revoke_device(device_id))
+    if not device:
+        raise HTTPException(status_code=404, detail="Bridge device not found")
+    return {"ok": True, "device": device}
+
+
+@app.get("/api/v1/bridge/devices/{device_id}/qr", dependencies=[Depends(require_setup_access)])
+def bridge_pairing_qr_not_persisted(device_id: str):
+    device = _bridge_call(lambda: get_bridge_manager().get_device(device_id))
+    if not device:
+        raise HTTPException(status_code=404, detail="Bridge device not found")
+    raise HTTPException(
+        status_code=410,
+        detail={
+            "code": "PAIRING_QR_SHOWN_ONCE",
+            "message": "Il QR contiene la private key del dispositivo ed è disponibile solo nella risposta di creazione.",
+        },
+    )
+
+
+@app.post("/api/v1/bridge/restart", dependencies=[Depends(require_setup_access)])
+def bridge_restart():
+    return _bridge_call(lambda: get_bridge_manager().restart())
+
+
+@app.get("/api/v1/bridge/diagnostics", dependencies=[Depends(require_setup_access)])
+def bridge_diagnostics():
+    return _bridge_call(lambda: get_bridge_manager().diagnostics())
 
 
 class NoteRewriteRequest(BaseModel):

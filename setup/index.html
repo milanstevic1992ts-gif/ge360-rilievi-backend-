@@ -3,70 +3,117 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GE360 · Collegamento backend</title>
+<title>GE360 · Accesso remoto</title>
 <style>
-body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{max-width:760px;margin:auto;padding:24px}.card{background:#111827;border:1px solid #273244;border-radius:18px;padding:18px;margin:14px 0}.row{display:flex;gap:10px;flex-wrap:wrap}.pill{padding:6px 10px;border-radius:999px;background:#1f2937}.ok{color:#86efac}.bad{color:#fca5a5}button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}button.primary{background:#2563eb;color:white}button.secondary{background:#374151;color:white}input,textarea{box-sizing:border-box;width:100%;background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px;font:inherit}code{word-break:break-all}.small{font-size:13px;color:#94a3b8}.hidden{display:none}
+body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{max-width:820px;margin:auto;padding:24px}.card{background:#111827;border:1px solid #273244;border-radius:18px;padding:18px;margin:14px 0}.row{display:flex;gap:10px;flex-wrap:wrap}.pill{padding:6px 10px;border-radius:999px;background:#1f2937}.ok{color:#86efac}.bad{color:#fca5a5}.warn{color:#fde68a}button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}button.primary{background:#2563eb;color:white}button.secondary{background:#374151;color:white}button.danger{background:#7f1d1d;color:white}input,textarea{box-sizing:border-box;width:100%;background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px;font:inherit}code{word-break:break-all}.small{font-size:13px;color:#94a3b8}.hidden{display:none}.device{padding:12px 0;border-top:1px solid #273244}.qr{background:white;padding:10px;border-radius:12px;max-width:320px;width:100%;box-sizing:border-box}
 </style>
 </head>
 <body><div class="wrap">
-<h1>GE360 · Collegamento backend</h1>
-<p class="small">Configurazione rapida per collegare GE360 Open Plan3D al backend Debian tramite Tailscale.</p>
+<h1>GE360 · Accesso remoto</h1>
+<p class="small">WireGuard fa il tunnel. GE360 gestisce configurazione, dispositivi, QR e diagnostica. Il backend resta sulla porta 9888.</p>
 
 <div class="card">
-<h2>1 · Backend</h2>
-<div id="backendState">Caricamento…</div>
+<h2>GE360 DIRECT BRIDGE</h2>
+<div id="bridgeState">Controllo…</div>
+<p id="bridgeMessage" class="small"></p>
+<div class="row">
+<button class="secondary" id="bridgeRefresh">AGGIORNA</button>
+<button class="secondary" id="bridgeRestart">RIAVVIA WG</button>
+</div>
+<p class="small">Prima installazione sul server:</p>
+<textarea readonly rows="2">sudo bash scripts/install-direct-bridge.sh</textarea>
 </div>
 
 <div class="card">
-<h2>2 · Tailscale</h2>
-<div id="tailscaleState">Controllo…</div>
-<p class="small">Per configurare Tailscale Serve automaticamente sul server:</p>
-<textarea readonly rows="2">sudo bash scripts/setup-tailscale.sh</textarea>
+<h2>Collega dispositivo</h2>
+<label>Nome dispositivo</label>
+<input id="deviceName" placeholder="Telefono Milan">
+<div style="margin-top:10px"><button class="primary" id="pair">+ COLLEGA DISPOSITIVO</button></div>
+<div id="pairing" class="hidden">
+<p class="warn"><strong>QR mostrato una sola volta.</strong> Non viene salvata la private key del telefono.</p>
+<img id="qr" class="qr" alt="QR WireGuard">
+<label>Backend GE360</label><input id="bridgeBackend" readonly>
+<label style="display:block;margin-top:10px">Configurazione WireGuard</label>
+<textarea id="wgConfig" readonly rows="10"></textarea>
+</div>
 </div>
 
 <div class="card">
-<h2>3 · API key</h2>
-<p>La chiave viene mostrata solo quando viene generata o ruotata.</p>
+<h2>Dispositivi</h2>
+<div id="devices">Nessun dispositivo.</div>
+</div>
+
+<div class="card">
+<h2>API key GE360</h2>
+<p class="small">Separata dalle chiavi WireGuard. Protegge le API applicative GE360.</p>
 <button class="primary" id="generate">GENERA / RUOTA API KEY</button>
 <div id="keyBox" class="hidden">
-<p><strong>API key:</strong></p>
 <textarea id="apiKey" readonly rows="3"></textarea>
 <button class="secondary" data-copy="apiKey">COPIA API KEY</button>
 </div>
 </div>
 
-<div class="card">
-<h2>4 · Impostazioni frontend</h2>
-<label>Backend URL</label>
-<input id="serverUrl" readonly>
-<div class="row" style="margin-top:10px">
-<button class="secondary" data-copy="serverUrl">COPIA URL</button>
-<button class="secondary" id="refresh">AGGIORNA STATO</button>
-</div>
-<p class="small">Nel frontend inserisci questo URL e la API key generata sopra.</p>
-</div>
+<details class="card">
+<summary>Collegamento Tailscale precedente (opzionale)</summary>
+<div id="tailscaleState" class="small" style="margin-top:12px">Controllo…</div>
+</details>
 
 <div id="message" class="small"></div>
 </div>
 <script>
 const $=id=>document.getElementById(id);
 let profile=null;
-async function refresh(){
-  $('message').textContent='';
-  const r=await fetch('/api/v1/setup/status');
-  if(!r.ok){$('message').textContent='Setup disponibile direttamente da localhost oppure con una API key valida.';return}
-  profile=await r.json();
-  $('backendState').innerHTML='<span class="pill ok">Backend attivo</span> '+(profile.apiKeyConfigured?'<span class="pill ok">API key configurata</span>':'<span class="pill bad">API key mancante</span>');
-  const t=profile.tailscale;
-  $('tailscaleState').innerHTML=(t.installed?'<span class="pill ok">Installato</span>':'<span class="pill bad">Non installato</span>')+' '+(t.running?'<span class="pill ok">Connesso</span>':'<span class="pill bad">Non connesso</span>')+' '+(t.serveConfigured?'<span class="pill ok">Serve attivo</span>':'<span class="pill bad">Serve da configurare</span>')+(t.dnsName?'<p><code>'+t.dnsName+'</code></p>':'');
-  $('serverUrl').value=t.frontendServerUrl||profile.local.frontendServerUrl;
+async function jsonOrError(r){const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error((d.detail&&d.detail.message)||d.detail||('HTTP '+r.status));return d}
+async function refreshSetup(){
+  try{
+    const r=await fetch('/api/v1/setup/status'); if(!r.ok)return;
+    profile=await r.json();
+    const t=profile.tailscale||{};
+    $('tailscaleState').innerHTML=(t.installed?'Installato':'Non installato')+' · '+(t.running?'connesso':'non connesso')+' · '+(t.serveConfigured?'Serve attivo':'Serve inattivo');
+  }catch(e){}
 }
-$('generate').onclick=async()=>{
-  const r=await fetch('/api/v1/setup/api-key',{method:'POST'});
-  if(!r.ok){$('message').textContent='Generazione consentita solo localmente oppure con autenticazione.';return}
-  const d=await r.json(); $('apiKey').value=d.apiKey; $('keyBox').classList.remove('hidden'); await refresh();
+async function refreshBridge(){
+  $('message').textContent='';
+  try{
+    const d=await jsonOrError(await fetch('/api/v1/bridge/status'));
+    const online=d.state_code==='ONLINE';
+    $('bridgeState').innerHTML='<span class="pill '+(online?'ok':'bad')+'">'+d.state_code+'</span> <span class="pill">'+d.interface+'</span> <span class="pill">'+d.server_ip+':'+d.backend_port+'</span> <span class="pill">'+d.device_count+' dispositivi</span>';
+    $('bridgeMessage').textContent=(d.public_endpoint?'Endpoint: '+d.public_endpoint+'. ':'')+(d.message||'');
+    $('bridgeBackend').value=d.backend_url||'http://10.88.0.1:9888';
+  }catch(e){
+    $('bridgeState').innerHTML='<span class="pill bad">BRIDGE NON CONFIGURATO</span>';
+    $('bridgeMessage').textContent=e.message;
+  }
+  await refreshDevices();
+}
+async function refreshDevices(){
+  try{
+    const rows=await jsonOrError(await fetch('/api/v1/bridge/devices'));
+    if(!rows.length){$('devices').textContent='Nessun dispositivo.';return}
+    $('devices').innerHTML=rows.map(d=>'<div class="device"><strong>'+escapeHtml(d.name)+'</strong> · <code>'+d.vpn_ip+'</code> · '+d.status+(d.last_handshake_at?' · handshake '+d.last_handshake_at:'')+(d.status==='ACTIVE'?'<div style="margin-top:8px"><button class="danger" onclick="revokeDevice(\''+d.device_id+'\')">REVOCA</button></div>':'')+'</div>').join('');
+  }catch(e){$('devices').textContent='Dispositivi non disponibili: '+e.message}
+}
+function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
+async function revokeDevice(id){
+  if(!confirm('Revocare questo dispositivo?'))return;
+  try{await jsonOrError(await fetch('/api/v1/bridge/devices/'+id+'/revoke',{method:'POST'}));await refreshBridge()}catch(e){$('message').textContent=e.message}
+}
+$('pair').onclick=async()=>{
+  const name=$('deviceName').value.trim(); if(!name){$('message').textContent='Inserisci un nome dispositivo.';return}
+  try{
+    const d=await jsonOrError(await fetch('/api/v1/bridge/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}));
+    $('qr').src='data:image/png;base64,'+d.pairing.qr_png_base64;
+    $('wgConfig').value=d.pairing.wireguard_config;
+    $('bridgeBackend').value=d.pairing.backend_url;
+    $('pairing').classList.remove('hidden');
+    await refreshBridge();
+  }catch(e){$('message').textContent=e.message}
 };
-$('refresh').onclick=refresh;
-document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText($(b.dataset.copy).value);b.textContent='COPIATO ✓';setTimeout(()=>b.textContent=b.dataset.copy==='apiKey'?'COPIA API KEY':'COPIA URL',1200)});
-refresh();
+$('bridgeRefresh').onclick=refreshBridge;
+$('bridgeRestart').onclick=async()=>{try{await jsonOrError(await fetch('/api/v1/bridge/restart',{method:'POST'}));await refreshBridge()}catch(e){$('message').textContent=e.message}};
+$('generate').onclick=async()=>{
+  try{const d=await jsonOrError(await fetch('/api/v1/setup/api-key',{method:'POST'}));$('apiKey').value=d.apiKey;$('keyBox').classList.remove('hidden')}catch(e){$('message').textContent=e.message}
+};
+document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText($(b.dataset.copy).value);b.textContent='COPIATO ✓'});
+refreshSetup();refreshBridge();
 </script></body></html>
