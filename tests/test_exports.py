@@ -1,5 +1,6 @@
 from __future__ import annotations
 import json
+import re
 from pathlib import Path
 import ezdxf
 from PIL import Image
@@ -46,6 +47,12 @@ def test_svg_png_pdf_and_plan3d(tmp_path:Path):
     with Image.open(png) as im: assert im.size==(1600,1100) and im.format=='PNG'
     pdf_bytes=pdf.read_bytes()
     assert pdf_bytes.startswith(b'%PDF') and pdf.stat().st_size>1000
+    media_boxes = re.findall(
+        rb"/MediaBox\s*\[\s*0\s+0\s+([0-9.]+)\s+([0-9.]+)\s*\]",
+        pdf_bytes,
+    )
+    assert media_boxes
+    assert all(float(height) > float(width) for width, height in media_boxes)
     assert b'EDIL MILAN STEVIC' in pdf_bytes
     assert b'RIEPILOGO STANZE' in pdf_bytes
     assert b"NOTE E CONDIZIONI D'USO DEL PRESENTE ELABORATO" in pdf_bytes
