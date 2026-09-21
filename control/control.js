@@ -1,5 +1,5 @@
 const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
-const state={key:sessionStorage.getItem('ge360ControlKey')||'',summary:null,plans:[],jobs:[],catalog:[],system:null,activePlan:null,activeProcessed:null,activePhotos:[],activeVersions:[],tab:'overview',blobs:new Map()};
+const state={key:localStorage.getItem('ge360ControlKey')||'',summary:null,plans:[],jobs:[],catalog:[],system:null,activePlan:null,activeProcessed:null,activePhotos:[],activeVersions:[],tab:'overview',blobs:new Map()};
 function headers(){return state.key?{'X-GE360-API-Key':state.key}:{}} function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function fmt(v,d=1){return Number.isFinite(Number(v))?Number(v).toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}):'—'}
 function bytes(n){if(!Number.isFinite(Number(n)))return'—';const u=['B','KB','MB','GB','TB'];let i=0,v=Number(n);while(v>=1024&&i<u.length-1){v/=1024;i++}return fmt(v,i?1:0)+' '+u[i]}
@@ -11,7 +11,7 @@ async function blobUrl(path){const old=state.blobs.get(path);if(old)return old;c
 function toast(t){const e=$('#toast');e.textContent=t;e.classList.remove('hidden');clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.add('hidden'),1800)}
 function showAuth(msg=''){ $('#authGate').classList.remove('hidden');$('#authError').textContent=msg;$('#apiKeyInput').value=state.key||'';setTimeout(()=>$('#apiKeyInput').focus(),50)}
 function hideAuth(){$('#authGate').classList.add('hidden')}
-async function connect(){state.key=$('#apiKeyInput').value.trim();sessionStorage.setItem('ge360ControlKey',state.key);try{await api('/health');hideAuth();await loadAll()}catch(e){if(e.message!=='401')showAuth(e.message)}}
+async function connect(){state.key=$('#apiKeyInput').value.trim();localStorage.setItem('ge360ControlKey',state.key);try{await api('/health');hideAuth();await loadAll()}catch(e){if(e.message!=='401')showAuth(e.message)}}
 function stat(icon,label,value,sub=''){return '<article class="stat-card"><div class="stat-top"><small>'+esc(label)+'</small><span class="stat-icon">'+icon+'</span></div><b>'+esc(value)+'</b><small>'+esc(sub)+'</small></article>'}
 async function loadAll(){try{const [summary,plans,jobs,catalog,system]=await Promise.all([api('/control/summary'),api('/control/plans'),api('/control/jobs'),api('/work-catalog'),api('/control/status')]);state.summary=summary;state.plans=plans.plans||[];state.jobs=jobs.jobs||[];state.catalog=catalog.works||[];state.system=system;renderAll()}catch(e){if(e.message!=='401')toast('Errore: '+e.message)}}
 function renderAll(){renderDashboard();renderPlans();renderJobs();renderCatalog();renderDocuments();renderSystem();const s=state.system||{};$('#sideBackend').className='mini-status '+(s.backend?.ok?'ok':'bad');$('#sideBackend b').textContent=s.backend?.ok?'ONLINE':'OFFLINE';$('#sideAi').className='mini-status '+(s.ai?.reachable?'ok':'bad');$('#sideAi b').textContent=s.ai?.reachable?(s.ai.modelAvailable?'PRONTO':'MODELLO?'):'OFFLINE'}
