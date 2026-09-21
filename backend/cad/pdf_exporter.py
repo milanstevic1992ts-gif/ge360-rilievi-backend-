@@ -4,7 +4,7 @@ import os
 from datetime import datetime
 from pathlib import Path
 
-from reportlab.lib.pagesizes import A4, landscape
+from reportlab.lib.pagesizes import A4
 from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
@@ -71,17 +71,20 @@ def _dimension_wall(c, pt, wall, scale: float) -> None:
 
 
 def export_pdf(model: PlanModel, path: Path) -> None:
-    page = landscape(A4)
+    # GE360 reports use A4 portrait as the canonical print/export format.
+    page = A4
     c = canvas.Canvas(str(path), pagesize=page, pageCompression=0)
     pw, ph = page
     margin = 34
     _draw_brand(c, pw, ph, margin, f"{model.name} · RILIEVO TECNICO")
 
+    # Portrait-first composition: the drawing gets the full page width and
+    # the summary is placed underneath instead of squeezing the plan sideways.
     plan_left = margin
-    plan_bottom = 45
-    plan_right = pw * 0.69
+    plan_bottom = 320
+    plan_right = pw - margin
     plan_top = ph - 88
-    panel_left = plan_right + 18
+    panel_left = margin
     panel_right = pw - margin
 
     b = model_bounds(model, margin_mm=1050)
@@ -162,44 +165,84 @@ def export_pdf(model: PlanModel, path: Path) -> None:
         c.setFont("Helvetica", 7)
         c.drawCentredString(x, y - 6, f"{room.floorAreaM2:.2f} m² · {room.widthM:.2f} × {room.depthM:.2f} m")
 
-    # right summary panel
+    # Lower summary area: two balanced cards, optimized for A4 portrait.
+    summary_top = plan_bottom - 14
+    summary_bottom = 52
+    gap = 10
+    summary_width = panel_right - panel_left
+    rooms_right = panel_left + summary_width * 0.61
+    metrics_left = rooms_right + gap
+
     c.setFillColorRGB(0.97, 0.98, 0.99)
-    c.roundRect(panel_left, plan_bottom, panel_right - panel_left, plan_top - plan_bottom, 10, stroke=0, fill=1)
+    c.roundRect(
+        panel_left,
+        summary_bottom,
+        rooms_right - panel_left,
+        summary_top - summary_bottom,
+        10,
+        stroke=0,
+        fill=1,
+    )
+    c.roundRect(
+        metrics_left,
+        summary_bottom,
+        panel_right - metrics_left,
+        summary_top - summary_bottom,
+        10,
+        stroke=0,
+        fill=1,
+    )
+
+    # Room overview card.
     x = panel_left + 12
-    y = plan_top - 18
+    y = summary_top - 18
     c.setFillColorRGB(0.06, 0.09, 0.16)
-    c.setFont("Helvetica-Bold", 10)
-    c.drawString(x, y, "RIEPILOGO STANZE")
-    y -= 16
-    total_floor = 0.0
-    for room in model.rooms:
-        total_floor += room.floorAreaM2
-        if y < plan_bottom + 80:
-            break
-        c.setFont("Helvetica-Bold", 7.5)
-        c.drawString(x, y, room.name[:28])
-        c.setFont("Helvetica", 6.5)
-        c.drawRightString(panel_right - 12, y, f"{room.floorAreaM2:.2f} m²")
-        y -= 10
-        lengths = " · ".join(_m(face.lengthMm) for face in room.wallFaces[:6])
-        c.setFillColorRGB(0.35, 0.39, 0.47)
-        c.setFont("Helvetica", 5.5)
-        c.drawString(x, y, ("Lati: " + lengths)[:58])
-        c.setFillColorRGB(0.06, 0.09, 0.16)
-        y -= 13
-    c.setStrokeColorRGB(0.78, 0.82, 0.88)
-    c.line(x, y, panel_right - 12, y)
+    c.setFont("Helvetica-Bold", 9.5)
+    c.drawString(x, y, "RIEPILOGO AMBIENTI")
     y -= 15
-    c.setFont("Helvetica-Bold", 9)
-    c.drawString(x, y, "Superficie totale")
-    c.drawRightString(panel_right - 12, y, f"{total_floor:.2f} m²")
-    y -= 18
-    c.setFont("Helvetica", 6.2)
-    c.drawString(x, y, f"Porte: {sum(1 for o in model.openings if o.type == 'door')}  ·  Finestre: {sum(1 for o in model.openings if o.type == 'window')}")
-    y -= 11
-    c.drawString(x, y, f"Pareti nette: {sum(r.netWallAreaM2 for r in model.rooms):.2f} m²")
-    y -= 11
-    c.drawString(x, y, f"Pavimenti: {sum(r.floorAreaM2 for r in model.rooms):.2f} m²")
+    total_floor = sum(room.floorAreaM2 for room in model.rooms)
+    available_rows = max(1, int((y - summary_bottom - 22) / 19))
+    shown_rooms = model.rooms[:available_rows]
+    for room in shown_rooms:
+        c.setFont("Helvetica-Bold", 7.2)
+        c.drawString(x, y, room.name[:27])
+        c.setFont("Helvetica", 6.6)
+        c.drawRightString(rooms_right - 12, y, f"{room.floorAreaM2:.2f} m²")
+        y -= 9
+        dims = f"{room.widthM:.2f} × {room.depthM:.2f} m · perim. {room.perimeterM:.2f} m"
+        c.setFillColorRGB(0.35, 0.39, 0.47)
+        c.setFont("Helvetica", 5.6)
+        c.drawString(x, y, dims[:52])
+        c.setFillColorRGB(0.06, 0.09, 0.16)
+        y -= 10
+    remaining = len(model.rooms) - len(shown_rooms)
+    if remaining > 0:
+        c.setFillColorRGB(0.35, 0.39, 0.47)
+        c.setFont("Helvetica-Oblique", 5.8)
+        c.drawString(x, max(summary_bottom + 12, y), f"+ {remaining} ambienti nel computo dettagliato")
+
+    # Key figures card.
+    mx = metrics_left + 12
+    my = summary_top - 18
+    c.setFillColorRGB(0.06, 0.09, 0.16)
+    c.setFont("Helvetica-Bold", 9.5)
+    c.drawString(mx, my, "DATI PRINCIPALI")
+    my -= 20
+    metrics = [
+        ("Superficie totale", f"{total_floor:.2f} m²"),
+        ("Pareti nette", f"{sum(r.netWallAreaM2 for r in model.rooms):.2f} m²"),
+        ("Ambienti", str(len(model.rooms))),
+        ("Porte", str(sum(1 for o in model.openings if o.type == "door"))),
+        ("Finestre", str(sum(1 for o in model.openings if o.type == "window"))),
+    ]
+    for label, value in metrics:
+        c.setFillColorRGB(0.35, 0.39, 0.47)
+        c.setFont("Helvetica", 6.2)
+        c.drawString(mx, my, label)
+        c.setFillColorRGB(0.06, 0.09, 0.16)
+        c.setFont("Helvetica-Bold", 8)
+        c.drawRightString(panel_right - 12, my, value)
+        my -= 18
 
     c.setFillColorRGB(0.35, 0.39, 0.47)
     c.setFont("Helvetica", 5.5)
@@ -207,42 +250,58 @@ def export_pdf(model: PlanModel, path: Path) -> None:
     c.drawRightString(pw - margin, 21, BRAND_TAGLINE)
     c.showPage()
 
-    # Page 2: room schedule
+    # Page 2+: room schedule, redesigned as readable portrait cards.
+    c.setPageSize(page)
     _draw_brand(c, pw, ph, margin, f"{model.name} · COMPUTO STANZE")
-    y = ph - 92
-    cols = [margin, 190, 250, 315, 380, 450, 520, 600, pw - margin]
-    headers = ["Ambiente", "Pav.", "Perim.", "Pareti nette", "Soffitto", "Battisc.", "Volume", "Aperture"]
-    c.setFillColorRGB(0.92, 0.94, 0.97)
-    c.rect(margin, y - 14, pw - 2 * margin, 19, stroke=0, fill=1)
-    c.setFillColorRGB(0.06, 0.09, 0.16)
-    c.setFont("Helvetica-Bold", 6.8)
-    for i, h in enumerate(headers):
-        c.drawString(cols[i] + 3, y - 7, h)
-    y -= 22
-    c.setFont("Helvetica", 6.6)
+    y = ph - 94
+
+    c.setFillColorRGB(0.35, 0.39, 0.47)
+    c.setFont("Helvetica", 6.2)
+    c.drawString(
+        margin,
+        y,
+        "Misure e quantità principali per ambiente. Le quote restano soggette a verifica diretta in cantiere.",
+    )
+    y -= 18
+
+    card_w = pw - 2 * margin
+    card_h = 48
+    card_gap = 8
+
     for room in model.rooms:
-        vals = [
-            room.name,
-            f"{room.floorAreaM2:.2f} m²",
-            f"{room.perimeterM:.2f} m",
-            f"{room.netWallAreaM2:.2f} m²",
-            f"{room.ceilingAreaM2:.2f} m²",
-            f"{room.skirtingM:.2f} m",
-            f"{room.volumeM3:.2f} m³",
-            str(len(room.openings)),
-        ]
-        for i, v in enumerate(vals):
-            c.drawString(cols[i] + 3, y, str(v)[:24])
-        c.setStrokeColorRGB(0.88, 0.90, 0.93)
-        c.line(margin, y - 4, pw - margin, y - 4)
-        y -= 16
-        if y < 55:
+        if y - card_h < 48:
             c.showPage()
+            c.setPageSize(page)
             _draw_brand(c, pw, ph, margin, f"{model.name} · COMPUTO STANZE")
-            y = ph - 92
+            y = ph - 94
+
+        c.setFillColorRGB(0.97, 0.98, 0.99)
+        c.roundRect(margin, y - card_h, card_w, card_h, 8, stroke=0, fill=1)
+
+        c.setFillColorRGB(0.06, 0.09, 0.16)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.drawString(margin + 11, y - 14, room.name[:42])
+        c.setFont("Helvetica-Bold", 8)
+        c.drawRightString(pw - margin - 11, y - 14, f"{room.floorAreaM2:.2f} m²")
+
+        c.setFont("Helvetica", 6.2)
+        c.setFillColorRGB(0.25, 0.29, 0.36)
+        line1 = (
+            f"Perimetro {room.perimeterM:.2f} m  ·  Pareti nette {room.netWallAreaM2:.2f} m²"
+            f"  ·  Soffitto {room.ceilingAreaM2:.2f} m²"
+        )
+        c.drawString(margin + 11, y - 28, line1)
+
+        line2 = (
+            f"Battiscopa {room.skirtingM:.2f} m  ·  Volume {room.volumeM3:.2f} m³"
+            f"  ·  Aperture {len(room.openings)}  ·  Ingombro {room.widthM:.2f} × {room.depthM:.2f} m"
+        )
+        c.drawString(margin + 11, y - 39, line2)
+        y -= card_h + card_gap
+
     c.setFillColorRGB(0.35, 0.39, 0.47)
     c.setFont("Helvetica", 5.8)
-    c.drawString(margin, 25, "Documento generato dal backend GE360 Rilievi")
+    c.drawString(margin, 25, "Documento A4 verticale generato dal backend GE360 Rilievi")
 
     works = list(model.metadata.get("works") or [])
     if works:
