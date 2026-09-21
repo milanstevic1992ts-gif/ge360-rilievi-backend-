@@ -255,3 +255,19 @@ Per riattivarlo basta rieseguire l'installer. La cancellazione permanente di chi
 GE360 Direct Bridge è pensato per l'installazione Debian/systemd nativa. Il `docker-compose.yml` continua intenzionalmente a pubblicare 9888 soltanto su loopback e non configura WireGuard nell'host.
 
 Il Bridge è indipendente da solver geometrico, CAD, Qwen e Ollama. Qwen3:8b non configura e non modifica WireGuard.
+
+
+## QR GE360 one-shot
+
+Il pairing Android usa un QR GE360 completo in formato `GE360_DIRECT_BRIDGE_V1`. Una sola scansione trasferisce:
+
+- configurazione WireGuard del singolo dispositivo;
+- URL backend `http://10.88.0.1:9888`;
+- chiave applicativa per-device con prefisso `ge360d_`;
+- identificativo del dispositivo.
+
+La master API key amministrativa **non entra nel QR**. Ogni telefono riceve una propria chiave casuale; nel database GE360 viene salvato solo il relativo hash SHA-256. La chiave in chiaro esiste soltanto nella risposta one-shot di creazione e nel QR mostrato in quel momento.
+
+Le API operative accettano sia la master key sia una chiave dispositivo attiva. Le API `/api/v1/setup/*` continuano ad accettare soltanto localhost diretto o la master key. Quando un dispositivo viene revocato, GE360 rimuove il peer WireGuard e invalida immediatamente anche la sua chiave applicativa.
+
+La risposta di `POST /api/v1/bridge/devices` mantiene inoltre `wireguard_qr_png_base64` come QR WireGuard puro per compatibilità, mentre `qr_png_base64` è il QR GE360 completo destinato all'app.

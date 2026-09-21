@@ -37,7 +37,7 @@ if not read_runtime_api_key(settings):
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
-app = FastAPI(title="GE360 Rilievi Backend", version="1.3.0")
+app = FastAPI(title="GE360 Rilievi Backend", version="1.3.1")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -69,8 +69,15 @@ def require_api_key(x_ge360_api_key: str | None = Header(default=None)) -> None:
     api_key = read_runtime_api_key(settings)
     if not api_key:
         return
-    if not x_ge360_api_key or not secrets.compare_digest(x_ge360_api_key, api_key):
-        raise HTTPException(status_code=401, detail="Invalid API key")
+    if x_ge360_api_key and secrets.compare_digest(x_ge360_api_key, api_key):
+        return
+    if x_ge360_api_key and x_ge360_api_key.startswith("ge360d_"):
+        try:
+            if get_bridge_manager().authenticate_app_token(x_ge360_api_key):
+                return
+        except HTTPException:
+            pass
+    raise HTTPException(status_code=401, detail="Invalid API key")
 
 
 def _direct_local_setup_request(request: Request) -> bool:
@@ -206,7 +213,7 @@ def health():
     return {
         "ok": True,
         "service": "ge360-rilievi-backend",
-        "version": "1.3.0",
+        "version": "1.3.1",
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(read_runtime_api_key(settings)),
         "setupUrl": "/setup/",
@@ -273,7 +280,7 @@ def bridge_pairing_qr_not_persisted(device_id: str):
         status_code=410,
         detail={
             "code": "PAIRING_QR_SHOWN_ONCE",
-            "message": "Il QR contiene la private key del dispositivo ed è disponibile solo nella risposta di creazione.",
+            "message": "Il QR contiene la private key WireGuard e la chiave applicativa del dispositivo; è disponibile solo nella risposta di creazione.",
         },
     )
 

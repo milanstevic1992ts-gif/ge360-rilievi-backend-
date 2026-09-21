@@ -30,8 +30,8 @@ body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}
 <input id="deviceName" placeholder="Telefono Milan">
 <div style="margin-top:10px"><button class="primary" id="pair">+ COLLEGA DISPOSITIVO</button></div>
 <div id="pairing" class="hidden">
-<p class="warn"><strong>QR mostrato una sola volta.</strong> Non viene salvata la private key del telefono.</p>
-<img id="qr" class="qr" alt="QR WireGuard">
+<p class="warn"><strong>QR GE360 mostrato una sola volta.</strong> Contiene tunnel WireGuard + chiave applicativa del dispositivo. Il server salva solo l'hash della chiave applicativa e non salva la private key WireGuard del telefono.</p>
+<img id="qr" class="qr" alt="QR GE360 Direct Bridge">
 <label>Backend GE360</label><input id="bridgeBackend" readonly>
 <label style="display:block;margin-top:10px">Configurazione WireGuard</label>
 <textarea id="wgConfig" readonly rows="10"></textarea>
@@ -44,8 +44,8 @@ body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}
 </div>
 
 <div class="card">
-<h2>API key GE360</h2>
-<p class="small">Separata dalle chiavi WireGuard. Protegge le API applicative GE360.</p>
+<h2>Master API key GE360</h2>
+<p class="small">Chiave amministrativa separata. Il QR dei dispositivi usa una chiave applicativa dedicata e revocabile, non questa master key.</p>
 <button class="primary" id="generate">GENERA / RUOTA API KEY</button>
 <div id="keyBox" class="hidden">
 <textarea id="apiKey" readonly rows="3"></textarea>

@@ -12,16 +12,14 @@ from .network import (
     try_upnp_mapping,
     upnp_external_ipv4,
 )
-from .qr import wireguard_qr_png_base64
+from .qr import ge360_pairing_qr_png_base64, wireguard_qr_png_base64
 from .store import BridgeStore
 from .wireguard import WireGuardController
-
 
 class BridgeUnavailable(RuntimeError):
     def __init__(self, code: str, message: str, status_code: int = 409):
         super().__init__(message)
         self.code, self.message, self.status_code = code, message, status_code
-
 
 class DirectBridgeManager:
     def __init__(self, settings: BridgeSettings, store: BridgeStore | None = None, wireguard: WireGuardController | None = None):
@@ -37,7 +35,11 @@ class DirectBridgeManager:
             "last_seen_at": device.get("last_seen_at"), "status": device["status"],
             "revoked_at": device.get("revoked_at"), "last_handshake_at": device.get("last_handshake_at"),
             "rx_bytes": int(device.get("rx_bytes") or 0), "tx_bytes": int(device.get("tx_bytes") or 0),
+            "app_token_configured": bool(device.get("app_token_hash")),
         }
+
+    def authenticate_app_token(self, token: str) -> bool:
+        return self.store.authenticate_app_token(token) is not None
 
     def _endpoint_or_raise(self):
         endpoint = resolve_public_endpoint(self.settings)
@@ -61,12 +63,9 @@ class DirectBridgeManager:
         active_devices = self.store.list(active_only=True)
         handshakes = [row.get("last_handshake_at") for row in active_devices if row.get("last_handshake_at")]
         state_code = "ONLINE" if active and endpoint.available else endpoint.state_code
-        if not self.settings.enabled:
-            state_code = "DISABLED"
-        elif not installed:
-            state_code = "WIREGUARD_NOT_INSTALLED"
-        elif not active:
-            state_code = "WIREGUARD_INACTIVE"
+        if not self.settings.enabled: state_code = "DISABLED"
+        elif not installed: state_code = "WIREGUARD_NOT_INSTALLED"
+        elif not active: state_code = "WIREGUARD_INACTIVE"
         return {
             "enabled": self.settings.enabled, "interface": self.settings.interface,
             "server_ip": str(self.settings.server_ip), "port": self.settings.listen_port,
@@ -101,7 +100,12 @@ class DirectBridgeManager:
         try:
             self.wireguard.write_config(self.store.list(active_only=True))
             self.wireguard.apply_peer(client_public, device["vpn_ip"])
+            app_token = self.store.issue_app_token(device["device_id"])
         except Exception:
+            try:
+                self.wireguard.remove_peer(client_public)
+            except Exception:
+                pass
             self.store.revoke(device["device_id"])
             try:
                 self.wireguard.write_config(self.store.list(active_only=True))
@@ -110,12 +114,24 @@ class DirectBridgeManager:
             raise
         server_public = self.wireguard.server_public_key()
         config = self.client_config(client_private, device["vpn_ip"], server_public, endpoint.endpoint)
+        ge360_qr = ge360_pairing_qr_png_base64(
+            wireguard_config=config,
+            backend_url=self.settings.backend_url,
+            api_key=app_token,
+            device_id=device["device_id"],
+        )
         return {
-            "device": self.public_device(device),
+            "device": self.public_device(self.store.get(device["device_id"]) or device),
             "pairing": {
-                "shown_once": True, "wireguard_config": config,
-                "qr_png_base64": wireguard_qr_png_base64(config),
-                "backend_url": self.settings.backend_url, "endpoint": endpoint.endpoint,
+                "shown_once": True,
+                "format": "GE360_DIRECT_BRIDGE_V1",
+                "wireguard_config": config,
+                "backend_url": self.settings.backend_url,
+                "endpoint": endpoint.endpoint,
+                "api_key": app_token,
+                "auth_scope": "device",
+                "qr_png_base64": ge360_qr,
+                "wireguard_qr_png_base64": wireguard_qr_png_base64(config),
                 "port_mapping": mapping,
             },
         }
@@ -130,8 +146,7 @@ class DirectBridgeManager:
 
     def revoke_device(self, device_id: str) -> dict | None:
         row = self.store.get(device_id)
-        if not row:
-            return None
+        if not row: return None
         if row["status"] != "REVOKED":
             self.wireguard.remove_peer(row["public_key"])
             row = self.store.revoke(device_id) or row

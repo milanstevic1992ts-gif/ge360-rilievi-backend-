@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import ipaddress
+import secrets
 import sqlite3
 import uuid
 from datetime import datetime, timezone
@@ -19,15 +21,18 @@ CREATE TABLE IF NOT EXISTS bridge_devices (
     revoked_at TEXT,
     last_handshake_at TEXT,
     rx_bytes INTEGER NOT NULL DEFAULT 0,
-    tx_bytes INTEGER NOT NULL DEFAULT 0
+    tx_bytes INTEGER NOT NULL DEFAULT 0,
+    app_token_hash TEXT,
+    app_token_created_at TEXT
 );
 CREATE INDEX IF NOT EXISTS idx_bridge_devices_status ON bridge_devices(status);
 """
 
-
 def _utcnow() -> str:
     return datetime.now(timezone.utc).isoformat()
 
+def _token_hash(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
 class BridgeStore:
     def __init__(self, path: Path):
@@ -36,6 +41,13 @@ class BridgeStore:
         self._lock = RLock()
         with self.connect() as con:
             con.executescript(SCHEMA)
+            columns = {row["name"] for row in con.execute("PRAGMA table_info(bridge_devices)").fetchall()}
+            if "app_token_hash" not in columns:
+                con.execute("ALTER TABLE bridge_devices ADD COLUMN app_token_hash TEXT")
+            if "app_token_created_at" not in columns:
+                con.execute("ALTER TABLE bridge_devices ADD COLUMN app_token_created_at TEXT")
+            con.execute("CREATE INDEX IF NOT EXISTS idx_bridge_devices_app_token_hash ON bridge_devices(app_token_hash)")
+            con.commit()
 
     def connect(self) -> sqlite3.Connection:
         con = sqlite3.connect(self.path, timeout=10, check_same_thread=False)
@@ -66,6 +78,34 @@ class BridgeStore:
                 raise ValueError("Duplicate WireGuard public key or VPN IP") from exc
         return self.get(device_id) or {}
 
+    def issue_app_token(self, device_id: str) -> str:
+        token = "ge360d_" + secrets.token_urlsafe(36)
+        digest = _token_hash(token)
+        now = _utcnow()
+        with self._lock, self.connect() as con:
+            row = con.execute("SELECT status FROM bridge_devices WHERE device_id=?", (device_id,)).fetchone()
+            if not row:
+                raise ValueError("Bridge device not found")
+            if row["status"] != "ACTIVE":
+                raise ValueError("Cannot issue token for revoked bridge device")
+            con.execute(
+                "UPDATE bridge_devices SET app_token_hash=?, app_token_created_at=? WHERE device_id=?",
+                (digest, now, device_id),
+            )
+            con.commit()
+        return token
+
+    def authenticate_app_token(self, token: str) -> dict | None:
+        if not token or not token.startswith("ge360d_") or len(token) < 32:
+            return None
+        digest = _token_hash(token)
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT * FROM bridge_devices WHERE app_token_hash=? AND status='ACTIVE' LIMIT 1",
+                (digest,),
+            ).fetchone()
+        return self._row(row)
+
     def get(self, device_id: str) -> dict | None:
         with self.connect() as con:
             return self._row(con.execute("SELECT * FROM bridge_devices WHERE device_id=?", (device_id,)).fetchone())
@@ -86,7 +126,10 @@ class BridgeStore:
             row = con.execute("SELECT * FROM bridge_devices WHERE device_id=?", (device_id,)).fetchone()
             if not row:
                 return None
-            con.execute("UPDATE bridge_devices SET status='REVOKED', revoked_at=? WHERE device_id=?", (now, device_id))
+            con.execute(
+                "UPDATE bridge_devices SET status='REVOKED', revoked_at=?, app_token_hash=NULL, app_token_created_at=NULL WHERE device_id=?",
+                (now, device_id),
+            )
             con.commit()
         return self.get(device_id)
 
