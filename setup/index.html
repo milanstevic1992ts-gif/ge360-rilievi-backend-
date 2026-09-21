@@ -53,6 +53,48 @@ body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}
 </div>
 </div>
 
+<div class="card">
+<h2>Configurazione · Reinstallazione e ripristino</h2>
+<p class="small">Questa è la strada verificata sul server GE360. Usala dopo una reinstallazione Linux, un aggiornamento importante o se Direct Bridge smette di funzionare.</p>
+
+<div class="row">
+<span class="pill">Backend TCP 9888</span>
+<span class="pill">WireGuard UDP 51820</span>
+<span class="pill">wg0 · 10.88.0.1/24</span>
+</div>
+
+<p class="small"><strong>1. Ripristino automatico GE360</strong></p>
+<textarea readonly rows="2">sudo bash /opt/ge360/ge360-rilievi-backend/scripts/recover-linux-install.sh</textarea>
+
+<p class="small"><strong>2. Reinstallazione Direct Bridge</strong></p>
+<textarea readonly rows="3">sudo GE360_SERVICE_USER=ge360 \
+bash /opt/ge360/ge360-rilievi-backend/scripts/install-direct-bridge.sh</textarea>
+
+<p class="small"><strong>3. Verifica IPv6 pubblico</strong></p>
+<textarea readonly rows="2">ip -6 addr show scope global</textarea>
+<p class="small">Se la connessione IPv4 è sotto CGNAT, impostare in <code>/etc/ge360/direct-bridge/bridge.env</code> l'IPv6 pubblico stabile come <code>GE360_PUBLIC_HOST</code> e lasciare <code>GE360_BRIDGE_AUTO_PORT_MAPPING=false</code>.</p>
+
+<p class="small"><strong>4. Riavvio completo</strong></p>
+<textarea readonly rows="4">sudo systemctl restart ge360-direct-bridge-firewall
+sudo systemctl restart wg-quick@wg0
+sudo systemctl restart ge360-rilievi-backend
+ge360-rilievi-status</textarea>
+
+<p class="small"><strong>5. Backup da conservare prima di reinstallare</strong></p>
+<textarea readonly rows="5">sudo tar -czf ~/ge360-backup-$(date +%Y%m%d).tar.gz \
+/etc/ge360-rilievi-backend \
+/etc/ge360/direct-bridge \
+/opt/ge360/data/rilievi \
+/var/lib/ge360/direct-bridge</textarea>
+
+<p class="warn"><strong>Importante:</strong> non esporre TCP 9888 sul router. Il frontend remoto entra tramite WireGuard UDP 51820 e raggiunge il backend su <code>http://10.88.0.1:9888</code>.</p>
+
+<details>
+<summary>Compatibilità CPU server JARVIS</summary>
+<p class="small">Per evitare SIGILL / Illegal instruction sul vecchio AMD Phenom II, il backend usa NumPy &lt; 2.4 e SciPy &lt; 1.17. Questa regola è già salvata nel pacchetto/repository.</p>
+</details>
+</div>
+
 <details class="card">
 <summary>Collegamento Tailscale precedente (opzionale)</summary>
 <div id="tailscaleState" class="small" style="margin-top:12px">Controllo…</div>
