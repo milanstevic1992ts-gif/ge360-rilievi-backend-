@@ -23,6 +23,7 @@ jobs:
           bash -n packaging/deb/postinst
           bash -n scripts/ge360-rilievi-status
           bash -n scripts/ge360-rilievi-diagnose
+          bash -n scripts/ge360-boot-verify.sh
           bash -n packaging/deb/prerm
           bash -n packaging/deb/postrm
 
