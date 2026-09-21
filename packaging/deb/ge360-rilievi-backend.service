@@ -12,16 +12,19 @@ WorkingDirectory=/opt/ge360/ge360-rilievi-backend
 EnvironmentFile=/etc/ge360-rilievi-backend/ge360.env
 Environment=GE360_ENV_FILE=/etc/ge360-rilievi-backend/ge360.env
 Environment=PYTHONUNBUFFERED=1
+Environment=PYTHONDONTWRITEBYTECODE=1
 ExecStartPre=/opt/ge360/ge360-rilievi-backend/scripts/preflight.sh
 ExecStart=/opt/ge360/ge360-rilievi-backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 9888
 Restart=on-failure
 RestartSec=3
+TimeoutStartSec=45
 TimeoutStopSec=30
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/ge360/data/rilievi
+ReadWritePaths=/opt/ge360/data/rilievi /var/lib/ge360
+UMask=0027
 
 [Install]
 WantedBy=multi-user.target
