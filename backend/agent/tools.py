@@ -109,6 +109,39 @@ def _merge_nodes(plan: NormalizedPlan, keep: str, drop: str, max_gap_mm: float) 
         if wall.start_node == wall.end_node:
             return None, f"merge would collapse wall {wall.id}"
     del candidate.nodes[drop]
+
+    for tee in candidate.tees:
+        if tee.get("node") == drop:
+            tee["node"] = keep
+    host_by_id = {w.id: w for w in candidate.walls}
+    cleaned_tees = []
+    seen_tees = set()
+    for tee in candidate.tees:
+        host = host_by_id.get(tee.get("wallId"))
+        node = tee.get("node")
+        if host is None or node not in candidate.nodes or node in {host.start_node, host.end_node}:
+            continue
+        key = (node, tee.get("wallId"))
+        if key not in seen_tees:
+            cleaned_tees.append(tee)
+            seen_tees.add(key)
+    candidate.tees = cleaned_tees
+
+    cleaned_diagonals = []
+    for diag in candidate.diagonals:
+        if diag.get("nodeA") == drop:
+            diag["nodeA"] = keep
+        if diag.get("nodeB") == drop:
+            diag["nodeB"] = keep
+        if diag.get("nodeA") != diag.get("nodeB"):
+            cleaned_diagonals.append(diag)
+    candidate.diagonals = cleaned_diagonals
+
+    for gap in candidate.closed_gaps:
+        if gap.get("nodeA") == drop:
+            gap["nodeA"] = keep
+        if gap.get("nodeB") == drop:
+            gap["nodeB"] = keep
     return candidate, "ok"
 
 

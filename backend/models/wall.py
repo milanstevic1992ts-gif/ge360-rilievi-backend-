@@ -25,7 +25,8 @@ class WallModel(BaseModel):
     withinTolerance: bool = True
     suspect: bool = False
     suggestedLengthMm: float | None = None
-    # MEASURED = misura di cantiere, CALCULATED = ricavata dalle altre misure, SKETCH = solo dallo schizzo
+    # MEASURED = misura coerente; SUSPECT_MEASURED = misura originale conservata ma
+    # esclusa dalla geometria adottata; CALCULATED = ricavata; SKETCH = solo schizzo.
     lengthSource: str = "MEASURED"
 
     @property

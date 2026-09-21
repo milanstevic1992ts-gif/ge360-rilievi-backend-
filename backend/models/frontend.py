@@ -1,13 +1,13 @@
 from __future__ import annotations
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 PLAN_ID_PATTERN = r"^[A-Za-z0-9_-]{1,64}$"
 
 
 class XY(BaseModel):
-    x: float
-    y: float
+    x: float = Field(allow_inf_nan=False)
+    y: float = Field(allow_inf_nan=False)
 
 
 class FrontendWall(BaseModel):
@@ -83,3 +83,21 @@ class PlanPayload(BaseModel):
     wallReference: Literal["interior", "partitionAxis", "axis"] = "interior"
     surfaces: dict[str, Any] | None = None
     summary: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def unique_entity_ids(self):
+        groups = {
+            "wall": [row.id for row in self.walls],
+            "opening": [row.id for row in self.openings],
+            "diagonal": [row.id for row in self.diagonals],
+            "room": [row.id for row in self.rooms if row.id],
+        }
+        for label, ids in groups.items():
+            seen, duplicates = set(), set()
+            for value in ids:
+                if value in seen:
+                    duplicates.add(value)
+                seen.add(value)
+            if duplicates:
+                raise ValueError(f"duplicate {label} ids: {', '.join(sorted(duplicates))}")
+        return self

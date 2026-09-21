@@ -12,7 +12,7 @@ Implementato e coperto da test:
 - RAW originale immutabile più snapshot successivi;
 - SQLite per stato e indice;
 - stati `RAW`, `QUEUED`, `PROCESSING`, `PROCESSED`, `NEEDS_REVIEW`, `ERROR`;
-- worker interno `ThreadPoolExecutor` con deduplica per `planId`;
+- worker interno `ThreadPoolExecutor` con coda SQLite persistente e snapshot RAW per revisione;
 - normalizzazione mm, topologia NetworkX, solver SciPy, stanze Shapely;
 - agente Ollama **opzionale**, solo tool calling, massimo 5 iterazioni, validation/rollback;
 - fallback completo quando Ollama non è disponibile;
@@ -193,7 +193,7 @@ Endpoint principali:
 - `GET /api/v1/plans/{planId}/versions/{version}/{artifact}`
 - `POST /api/v1/notes/rewrite`
 
-`POST /process` e `/reprocess` non bloccano fino alla fine: restituiscono `QUEUED` e un `jobId`. Una seconda richiesta sullo stesso piano mentre esiste un job attivo non crea un worker concorrente.
+`POST /process` e `/reprocess` non bloccano fino alla fine: restituiscono `QUEUED` e un `jobId`. Una richiesta identica sulla stessa revisione viene deduplicata; una revisione RAW più nuova viene accodata dietro a quella in elaborazione, senza worker concorrenti sullo stesso piano.
 
 ## Storage
 
@@ -217,7 +217,7 @@ La pipeline deterministica non dipende da Ollama. Con `GE360_AI_ENABLED=false` l
 
 L'agente non può creare direttamente coordinate o sostituire `walls`. Propone solo tool GE360; ogni candidato passa snapshot, controllo misure/aperture/topologia, nuovo solve, validation e score. Se non migliora o altera dati autorevoli viene scartato.
 
-Il runtime V1 usa per default `qwen3:8b` via Ollama. Il manuale operativo versionato è in `backend/agent/instructions/handbook.md`, con esempi few-shot in `backend/agent/examples/geometry-cases.json`. L'agente ha libertà strategica e un repair budget indicativo del 30% per correggere autonomamente problemi parziali, ma non può inventare misure autorevoli. Capability mancanti vengono riportate come `missingCapabilities` invece di essere simulate con coordinate inventate.
+Il runtime V1 usa per default `qwen3:8b` via Ollama. Il manuale operativo versionato è in `backend/agent/instructions/handbook.md`, con esempi few-shot in `backend/agent/examples/geometry-cases.json`. L'agente ha libertà strategica e una tolleranza massima del 30% di elementi geometrici problematici/incerti. Il 30% è una soglia di errore residuo, non un budget di modifiche: anche oltre soglia il backend produce il miglior risultato disponibile e lo marca NEEDS_REVIEW. L'agente non può inventare misure autorevoli. Capability mancanti vengono riportate come `missingCapabilities` invece di essere simulate con coordinate inventate.
 
 ## Viewer 3D
 

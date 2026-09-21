@@ -4,8 +4,8 @@ import json
 from pathlib import Path
 from typing import Any
 
-INSTRUCTION_VERSION = "ge360-floorplan-agent-v1.0"
-AUTONOMOUS_REPAIR_BUDGET = 0.30
+INSTRUCTION_VERSION = "ge360-floorplan-agent-v1.1"
+MAX_ERROR_TOLERANCE_RATIO = 0.30
 
 _ROOT = Path(__file__).resolve().parent
 _HANDBOOK = _ROOT / "instructions" / "handbook.md"

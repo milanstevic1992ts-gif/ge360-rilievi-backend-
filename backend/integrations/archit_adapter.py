@@ -21,7 +21,7 @@ def to_archit(plan:PlanModel)->ArchitSnapshot:
     walls=[]
     for w in plan.walls:
         wall=Wall.straight(w.start.x/1000,w.start.y/1000,w.end.x/1000,w.end.y/1000,thickness=w.thicknessMm/1000,height=w.heightMm/1000)
-        if abs(wall.length-w.declaredLengthMm/1000)>1e-6: raise ValueError(f"archit-app changed authoritative wall length for {w.id}")
+        if abs(wall.length-w.calculatedLengthMm/1000)>1e-6: raise ValueError(f"archit-app changed solved wall length for {w.id}")
         walls.append(wall)
     polys=[]
     for room in plan.rooms:

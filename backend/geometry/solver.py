@@ -496,7 +496,8 @@ def solve_geometry(
             calculatedLengthMm=calc, lengthErrorMm=err, solvedAngleDeg=math.degrees(theta), angleErrorDeg=angle_err,
             measured=measured, toleranceMm=tol, withinTolerance=within, suspect=w.id in suspect_ids,
             suggestedLengthMm=next((s["suggestedLengthMm"] for s in suspects if s["wallId"] == w.id), None),
-            lengthSource="MEASURED" if w.measured else ("CALCULATED" if w.id in calc_len else "SKETCH"),
+            lengthSource=("SUSPECT_MEASURED" if w.id in suspect_ids else "MEASURED")
+            if w.measured else ("CALCULATED" if w.id in calc_len else "SKETCH"),
             shapeFromSketch=w.id in sketch_shape_walls,
         )
         if not w.measured:

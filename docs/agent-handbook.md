@@ -12,7 +12,7 @@ Principio architetturale:
 - libertà strategica al modello;
 - solver deterministico come autorità geometrica;
 - misure utente immutabili;
-- auto-repair proattivo con repair budget indicativo del 30%;
+- auto-repair proattivo con tolleranza massima del 30% di elementi problematici/incerti; il 30% non limita il numero di tentativi e non è la tolleranza metrica delle misure;
 - sandbox + validation + rollback;
 - esempi selezionati dinamicamente;
 - NEEDS_REVIEW quando servono troppe assunzioni;

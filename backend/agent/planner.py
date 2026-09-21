@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from backend.agent.ollama import OllamaClient
-from backend.agent.prompt_loader import AUTONOMOUS_REPAIR_BUDGET, INSTRUCTION_VERSION, build_system_prompt
+from backend.agent.prompt_loader import MAX_ERROR_TOLERANCE_RATIO, INSTRUCTION_VERSION, build_system_prompt
 from backend.agent.tools import find_near_endpoints, inspect_plan
 from backend.geometry.normalizer import NormalizedPlan
 from backend.geometry.solver import SolverResult
@@ -21,7 +21,8 @@ class AgentPlanner:
             "geometryScore": score,
             "agentPolicy": {
                 "instructionVersion": INSTRUCTION_VERSION,
-                "autonomousRepairBudget": AUTONOMOUS_REPAIR_BUDGET,
+                "errorToleranceRatio": MAX_ERROR_TOLERANCE_RATIO,
+                "meaning": "quota massima di elementi problematici/incerti tollerata; non è un budget di modifiche",
                 "strategy": "autonomous-repair-with-deterministic-validation",
             },
         }

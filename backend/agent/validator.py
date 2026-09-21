@@ -56,7 +56,7 @@ def validate_candidate(snapshot: dict, plan: NormalizedPlan, topology: TopologyR
     if any(w.start_node == w.end_node for w in plan.walls):
         return CandidateValidation(False, "topology contains a collapsed wall", 0.0)
     model = build_cad_model(plan, solved)
-    wall_lengths = {w.id: w.declaredLengthMm for w in model.walls}
+    wall_lengths = {w.id: w.calculatedLengthMm for w in model.walls}
     for opening in model.openings:
         if opening.offsetMm < -tolerance_mm or opening.offsetMm + opening.widthMm > wall_lengths[opening.wallId] + tolerance_mm:
             return CandidateValidation(False, f"opening {opening.id} no longer fits its wall", 0.0)

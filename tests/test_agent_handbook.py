@@ -1,5 +1,5 @@
 from backend.agent.prompt_loader import (
-    AUTONOMOUS_REPAIR_BUDGET,
+    MAX_ERROR_TOLERANCE_RATIO,
     INSTRUCTION_VERSION,
     build_system_prompt,
     select_examples,
@@ -9,8 +9,9 @@ from backend.agent.prompt_loader import (
 def test_handbook_contains_authority_and_autonomy_policy():
     prompt = build_system_prompt({"warnings": ["gap at corner"], "geometryScore": 60})
     assert INSTRUCTION_VERSION in prompt
-    assert AUTONOMOUS_REPAIR_BUDGET == 0.30
+    assert MAX_ERROR_TOLERANCE_RATIO == 0.30
     assert "30%" in prompt
+    assert "non un repair budget" in prompt.lower()
     assert "Non modificare né inventare" in prompt
     assert "coordinate definitive" in prompt
 

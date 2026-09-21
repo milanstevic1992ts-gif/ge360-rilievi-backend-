@@ -67,11 +67,69 @@ def test_generated_plan_id_and_job_dedup(tmp_path: Path):
     assert len(created["planId"]) == 32
     pipe.save_raw(PlanPayload.model_validate(payload("dedupe")))
     real = pipe.process
-    def slow(pid): time.sleep(.15); return real(pid)
+    def slow(pid, raw_override=None): time.sleep(.15); return real(pid, raw_override=raw_override)
     pipe.process = slow  # type: ignore[method-assign]
     jobs = JobManager(pipe, 2); a = jobs.submit("dedupe"); b = jobs.submit("dedupe")
     assert a["status"] == "QUEUED" and a["created"] is True
     assert b["created"] is False and b["jobId"] == a["jobId"]
+
+
+def test_new_raw_revision_is_queued_behind_running_revision(tmp_path: Path):
+    import threading
+
+    s = cfg(tmp_path)
+    storage = PlanStorage(s.data_dir)
+    db = Database(s.db_path)
+    pipe = Pipeline(s, storage, db)
+
+    first_payload = payload("revision-queue")
+    first_payload["name"] = "Prima"
+    pipe.save_raw(PlanPayload.model_validate(first_payload))
+
+    started = threading.Event()
+    release = threading.Event()
+    real = pipe.process
+
+    def controlled(pid, raw_override=None):
+        if raw_override and raw_override.get("name") == "Prima":
+            started.set()
+            assert release.wait(2)
+        return real(pid, raw_override=raw_override)
+
+    pipe.process = controlled  # type: ignore[method-assign]
+    jobs = JobManager(pipe, 2)
+    first = jobs.submit("revision-queue")
+    assert started.wait(1)
+
+    second_payload = payload("revision-queue")
+    second_payload["name"] = "Seconda"
+    # Change the authoritative geometry too, not only metadata.
+    second_payload["walls"][0]["lengthCm"] = 250
+    second_payload["walls"][2]["lengthCm"] = 250
+    pipe.save_raw(PlanPayload.model_validate(second_payload))
+    second = jobs.submit("revision-queue")
+
+    assert second["created"] is True
+    assert second["jobId"] != first["jobId"]
+    release.set()
+
+    for job_id in (first["jobId"], second["jobId"]):
+        for _ in range(300):
+            state = jobs.state(job_id)
+            if state and state["status"] in {"DONE", "ERROR"}:
+                break
+            time.sleep(.01)
+        else:
+            raise AssertionError("job timeout")
+        assert state["status"] == "DONE", state
+
+    assert db.get("revision-queue")["current_version"] == 2
+    assert storage.raw_payload("revision-queue")["name"] == "Seconda"
+    manifests = [
+        json.loads((storage.plan_dir("revision-queue") / "versions" / f"{n:03d}" / "manifest.json").read_text())
+        for n in (1, 2)
+    ]
+    assert manifests[0]["inputHash"] != manifests[1]["inputHash"]
 
 
 def test_fastapi_polling_versions_files_security_and_cors(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

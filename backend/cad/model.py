@@ -18,7 +18,7 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
         meta=solved.wall_meta.get(wall.id,{})
         within=bool(meta.get("withinTolerance",True))
         source=meta.get("lengthSource","MEASURED" if wall.measured else "SKETCH")
-        quality="NEEDS_REVIEW" if not within else {"MEASURED":"OK","CALCULATED":"CALCULATED"}.get(source,"ESTIMATED")
+        quality="NEEDS_REVIEW" if not within else {"MEASURED":"OK","CALCULATED":"CALCULATED","SUSPECT_MEASURED":"NEEDS_REVIEW"}.get(source,"ESTIMATED")
         walls.append(WallModel(id=wall.id,startNodeId=wall.start_node,endNodeId=wall.end_node,start=PointMM(x=_clean(a[0]),y=_clean(a[1])),end=PointMM(x=_clean(b[0]),y=_clean(b[1])),declaredLengthMm=wall.length_mm if wall.measured else round(calc,1),calculatedLengthMm=calc,sourceLengthCm=wall.source_length_cm,heightMm=wall.height_mm,thicknessMm=wall.thickness_mm,sourceStroke={"strokeId":wall.raw.get("strokeId"),"a":{"x":wall.sketch_a[0],"y":wall.sketch_a[1]},"b":{"x":wall.sketch_b[0],"y":wall.sketch_b[1]}},quality=quality,orientation=meta.get("orientation","free"),measured=wall.measured,lengthErrorMm=round(abs(calc-wall.length_mm),3),toleranceMm=round(float(meta.get("toleranceMm",0.0)),3),withinTolerance=within,suspect=bool(meta.get("suspect")),suggestedLengthMm=meta.get("suggestedLengthMm"),lengthSource=source))
     openings=[]
     for raw in plan.openings:
@@ -27,15 +27,19 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
         width_mm=float(raw.get("widthCm") or 0)*10
         if width_mm<=0: warnings.append(f"Opening {raw.get('id')}: missing widthCm"); needs_review=True; continue
         reference=raw.get("referenceEnd") if raw.get("referenceEnd") in {"a","b"} else "a"; offset_cm=raw.get("offsetCm")
+        a=solved.node_positions[wall.start_node]; b=solved.node_positions[wall.end_node]
+        dx,dy=b[0]-a[0],b[1]-a[1]; gl=math.hypot(dx,dy) or 1.0
         if offset_cm is None:
             pos=raw.get("position")
             if pos is None: warnings.append(f"Opening {raw.get('id')}: missing offsetCm and position"); needs_review=True; continue
-            center_from_a=max(0,min(1,float(pos)))*wall.length_mm; offset_mm=center_from_a-width_mm/2 if reference=="a" else wall.length_mm-center_from_a-width_mm/2
+            center_from_a=max(0,min(1,float(pos)))*gl
+            offset_mm=center_from_a-width_mm/2 if reference=="a" else gl-center_from_a-width_mm/2
             warnings.append(f"Opening {raw.get('id')}: offset inferred from sketch position")
         else:
-            offset_mm=float(offset_cm)*10; center_from_a=offset_mm+width_mm/2 if reference=="a" else wall.length_mm-offset_mm-width_mm/2
-        if offset_mm<-1e-6 or offset_mm+width_mm>wall.length_mm+1e-6: warnings.append(f"Opening {raw.get('id')}: width/offset does not fit wall"); needs_review=True
-        a=solved.node_positions[wall.start_node]; b=solved.node_positions[wall.end_node]; dx,dy=b[0]-a[0],b[1]-a[1]; gl=math.hypot(dx,dy) or 1; ux,uy=dx/gl,dy/gl; cx,cy=a[0]+ux*center_from_a,a[1]+uy*center_from_a
+            offset_mm=float(offset_cm)*10
+            center_from_a=offset_mm+width_mm/2 if reference=="a" else gl-offset_mm-width_mm/2
+        if offset_mm<-1e-6 or offset_mm+width_mm>gl+1e-6: warnings.append(f"Opening {raw.get('id')}: width/offset does not fit solved wall"); needs_review=True
+        ux,uy=dx/gl,dy/gl; cx,cy=a[0]+ux*center_from_a,a[1]+uy*center_from_a
         if raw.get("heightMm") is not None: height_mm,hsrc=float(raw["heightMm"]),"USER_MM"
         elif raw.get("heightCm") is not None: height_mm,hsrc=float(raw["heightCm"])*10,"USER_CM"
         else: height_mm,hsrc=(2100.0 if raw.get("type")=="door" else 1200.0),"DEFAULT"

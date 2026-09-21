@@ -63,7 +63,7 @@ def _dimension_wall(c, pt, wall, scale: float) -> None:
     c.line(a[0] - ny * tick, a[1] + nx * tick, a[0] + ny * tick, a[1] - nx * tick)
     c.line(b[0] - ny * tick, b[1] + nx * tick, b[0] + ny * tick, b[1] - nx * tick)
     mx, my = (a[0] + b[0]) / 2, (a[1] + b[1]) / 2
-    label = _m(wall.declaredLengthMm)
+    label = _m(wall.calculatedLengthMm)
     c.setFillColorRGB(0.12, 0.16, 0.23)
     c.setFont("Helvetica-Bold", 6.5)
     c.drawCentredString(mx, my + 3, label)

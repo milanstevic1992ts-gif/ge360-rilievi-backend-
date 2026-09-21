@@ -6,7 +6,7 @@ from backend.models import PlanModel
 def to_archlang(plan:PlanModel)->str:
     lines=[f'plan "{plan.name.replace(chr(34), chr(39))}" {{']
     for w in plan.walls:
-        lines.append(f'  # wall {w.id} authoritative_length_mm={int(round(w.declaredLengthMm))}')
+        lines.append(f'  # wall {w.id} solved_length_mm={int(round(w.calculatedLengthMm))} declared_length_mm={int(round(w.declaredLengthMm))} source={w.lengthSource}')
     for r in plan.rooms:
         lines.append(f'  # room {r.roomId} "{r.name}" area_m2={r.floorAreaM2:.3f}')
     lines.append('}')

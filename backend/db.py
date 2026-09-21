@@ -29,6 +29,8 @@ CREATE TABLE IF NOT EXISTS jobs (
  created_at TEXT NOT NULL,
  updated_at TEXT NOT NULL,
  attempts INTEGER NOT NULL DEFAULT 0,
+ input_hash TEXT,
+ raw_json TEXT,
  result_json TEXT,
  error TEXT,
  FOREIGN KEY(plan_id) REFERENCES plans(plan_id)
@@ -36,9 +38,9 @@ CREATE TABLE IF NOT EXISTS jobs (
 
 CREATE INDEX IF NOT EXISTS idx_jobs_plan ON jobs(plan_id, created_at DESC);
 CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, updated_at);
-CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_plan
+CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_processing_plan
 ON jobs(plan_id)
-WHERE status IN ('QUEUED','PROCESSING');
+WHERE status='PROCESSING';
 
 CREATE TABLE IF NOT EXISTS plan_media (
  media_id TEXT PRIMARY KEY,
@@ -65,6 +67,20 @@ class Database:
         self.path.parent.mkdir(parents=True, exist_ok=True)
         with self.connect() as con:
             con.executescript(SCHEMA)
+            columns = {row["name"] for row in con.execute("PRAGMA table_info(jobs)").fetchall()}
+            if "input_hash" not in columns:
+                con.execute("ALTER TABLE jobs ADD COLUMN input_hash TEXT")
+            if "raw_json" not in columns:
+                con.execute("ALTER TABLE jobs ADD COLUMN raw_json TEXT")
+            con.execute("DROP INDEX IF EXISTS idx_jobs_one_active_plan")
+            con.execute(
+                "CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_processing_plan "
+                "ON jobs(plan_id) WHERE status='PROCESSING'"
+            )
+            con.execute(
+                "CREATE INDEX IF NOT EXISTS idx_jobs_hash "
+                "ON jobs(plan_id, input_hash, created_at DESC)"
+            )
             con.commit()
 
     def connect(self):
@@ -85,7 +101,10 @@ class Database:
                   name=excluded.name,
                   updated_at=excluded.updated_at,
                   status=excluded.status,
-                  path=excluded.path""",
+                  path=excluded.path,
+                  quality_json=NULL,
+                  needs_review=0,
+                  last_error=NULL""",
                 (plan_id, name, now, now, PlanStatus.RAW.value, 0, str(path)),
             )
             con.commit()
@@ -152,6 +171,54 @@ class Database:
             con.commit()
         return self.get_job(job_id) or {"jobId": job_id, "planId": plan_id, "status": "QUEUED"}, True
 
+    def create_or_get_revision_job(self, plan_id: str, input_hash: str, raw_payload: dict) -> tuple[dict, bool]:
+        """Create one persistent job per distinct RAW revision."""
+        now = _utcnow()
+        raw_json = json.dumps(raw_payload, ensure_ascii=False, separators=(",", ":"))
+        with self.connect() as con:
+            con.execute("BEGIN IMMEDIATE")
+            active = con.execute(
+                """SELECT * FROM jobs
+                   WHERE plan_id=? AND input_hash=? AND status IN ('QUEUED','PROCESSING')
+                   ORDER BY created_at DESC LIMIT 1""",
+                (plan_id, input_hash),
+            ).fetchone()
+            if active:
+                con.commit()
+                return self._job_row(active), False
+            job_id = str(uuid.uuid4())
+            con.execute(
+                """INSERT INTO jobs(job_id,plan_id,status,created_at,updated_at,attempts,input_hash,raw_json)
+                   VALUES(?,?,?,?,?,0,?,?)""",
+                (job_id, plan_id, "QUEUED", now, now, input_hash, raw_json),
+            )
+            con.commit()
+        return self.get_job(job_id) or {
+            "jobId": job_id, "planId": plan_id, "status": "QUEUED", "inputHash": input_hash
+        }, True
+
+    def next_queued_job(self, plan_id: str) -> dict | None:
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT * FROM jobs WHERE plan_id=? AND status='QUEUED' ORDER BY created_at ASC LIMIT 1",
+                (plan_id,),
+            ).fetchone()
+        return self._job_row(row) if row else None
+
+    def queued_plan_ids(self) -> list[str]:
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT DISTINCT plan_id FROM jobs WHERE status='QUEUED' ORDER BY plan_id"
+            ).fetchall()
+        return [str(row[0]) for row in rows]
+
+    def get_job_raw(self, job_id: str) -> dict | None:
+        with self.connect() as con:
+            row = con.execute("SELECT raw_json FROM jobs WHERE job_id=?", (job_id,)).fetchone()
+        if not row or not row["raw_json"]:
+            return None
+        return json.loads(row["raw_json"])
+
     def requeue_interrupted_jobs(self) -> list[dict]:
         now = _utcnow()
         with self.connect() as con:
@@ -202,6 +269,8 @@ class Database:
     def _job_row(row: sqlite3.Row) -> dict:
         out = dict(row)
         result_raw = out.pop("result_json")
+        input_hash = out.pop("input_hash", None)
+        out.pop("raw_json", None)
         return {
             "jobId": out.pop("job_id"),
             "planId": out.pop("plan_id"),
@@ -209,6 +278,7 @@ class Database:
             "createdAt": out.pop("created_at"),
             "updatedAt": out.pop("updated_at"),
             "attempts": int(out.pop("attempts") or 0),
+            "inputHash": input_hash,
             "result": json.loads(result_raw) if result_raw else None,
             "error": out.pop("error"),
         }

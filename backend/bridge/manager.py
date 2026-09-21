@@ -101,40 +101,44 @@ class DirectBridgeManager:
             self.wireguard.write_config(self.store.list(active_only=True))
             self.wireguard.apply_peer(client_public, device["vpn_ip"])
             app_token = self.store.issue_app_token(device["device_id"])
+            server_public = self.wireguard.server_public_key()
+            config = self.client_config(client_private, device["vpn_ip"], server_public, endpoint.endpoint)
+            ge360_qr = ge360_pairing_qr_png_base64(
+                wireguard_config=config,
+                backend_url=self.settings.backend_url,
+                api_key=app_token,
+                device_id=device["device_id"],
+            )
+            wg_qr = wireguard_qr_png_base64(config)
+            return {
+                "device": self.public_device(self.store.get(device["device_id"]) or device),
+                "pairing": {
+                    "shown_once": True,
+                    "format": "GE360_DIRECT_BRIDGE_V1",
+                    "wireguard_config": config,
+                    "backend_url": self.settings.backend_url,
+                    "endpoint": endpoint.endpoint,
+                    "api_key": app_token,
+                    "auth_scope": "device",
+                    "qr_png_base64": ge360_qr,
+                    "wireguard_qr_png_base64": wg_qr,
+                    "port_mapping": mapping,
+                },
+            }
         except Exception:
             try:
                 self.wireguard.remove_peer(client_public)
             except Exception:
                 pass
-            self.store.revoke(device["device_id"])
+            try:
+                self.store.revoke(device["device_id"])
+            except Exception:
+                pass
             try:
                 self.wireguard.write_config(self.store.list(active_only=True))
             except Exception:
                 pass
             raise
-        server_public = self.wireguard.server_public_key()
-        config = self.client_config(client_private, device["vpn_ip"], server_public, endpoint.endpoint)
-        ge360_qr = ge360_pairing_qr_png_base64(
-            wireguard_config=config,
-            backend_url=self.settings.backend_url,
-            api_key=app_token,
-            device_id=device["device_id"],
-        )
-        return {
-            "device": self.public_device(self.store.get(device["device_id"]) or device),
-            "pairing": {
-                "shown_once": True,
-                "format": "GE360_DIRECT_BRIDGE_V1",
-                "wireguard_config": config,
-                "backend_url": self.settings.backend_url,
-                "endpoint": endpoint.endpoint,
-                "api_key": app_token,
-                "auth_scope": "device",
-                "qr_png_base64": ge360_qr,
-                "wireguard_qr_png_base64": wireguard_qr_png_base64(config),
-                "port_mapping": mapping,
-            },
-        }
 
     def client_config(self, client_private: str, vpn_ip: str, server_public: str, endpoint: str) -> str:
         return "\n".join([

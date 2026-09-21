@@ -36,5 +36,5 @@ def export_png(model:PlanModel,path:Path,width:int=1600,height:int=1100)->None:
     for r in model.rooms:
         cx=sum(p.x for p in r.polygon)/len(r.polygon);cy=sum(p.y for p in r.polygon)/len(r.polygon);x,y=pt(cx,cy);d.text((x,y-15),r.name,fill='black',font=rf,anchor='mm');d.text((x,y+18),f'{r.floorAreaM2:.2f} m²',fill='black',font=af,anchor='mm')
     for w in model.walls:
-        ux,uy,_=wall_unit(w);nx,ny=-uy,ux;mx=(w.start.x+w.end.x)/2;my=(w.start.y+w.end.y)/2;x,y=pt(mx+nx*(w.thicknessMm/2+260),my+ny*(w.thicknessMm/2+260));text=f'{w.declaredLengthMm/1000:.2f} m';box=d.textbbox((x,y),text,font=df,anchor='mm');d.rectangle((box[0]-6,box[1]-3,box[2]+6,box[3]+3),fill='white');d.text((x,y),text,fill='black',font=df,anchor='mm')
+        ux,uy,_=wall_unit(w);nx,ny=-uy,ux;mx=(w.start.x+w.end.x)/2;my=(w.start.y+w.end.y)/2;x,y=pt(mx+nx*(w.thicknessMm/2+260),my+ny*(w.thicknessMm/2+260));text=f'{w.calculatedLengthMm/1000:.2f} m';box=d.textbbox((x,y),text,font=df,anchor='mm');d.rectangle((box[0]-6,box[1]-3,box[2]+6,box[3]+3),fill='white');d.text((x,y),text,fill='black',font=df,anchor='mm')
     d.text((margin,32),f'{model.name} · GE360 RILIEVO',fill='black',font=tf);d.text((width-margin,40),'unità: mm',fill='black',font=df,anchor='ra');img.save(path,'PNG')

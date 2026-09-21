@@ -23,9 +23,9 @@ def export_dxf(model:PlanModel,path:Path)->dict:
         if name not in doc.layers: doc.layers.add(name)
     doc.header["$INSUNITS"]=4; msp=doc.modelspace(); wall_map={w.id:w for w in model.walls}
     for w in model.walls:
-        outline=msp.add_lwpolyline(wall_outline(w),close=True,dxfattribs={"layer":"GE360_WALLS"}); _tag(outline,"wall",w.id,f"lengthMm={w.declaredLengthMm:.6f}",f"thicknessMm={w.thicknessMm:.6f}")
+        outline=msp.add_lwpolyline(wall_outline(w),close=True,dxfattribs={"layer":"GE360_WALLS"}); _tag(outline,"wall",w.id,f"lengthMm={w.calculatedLengthMm:.6f}",f"declaredLengthMm={w.declaredLengthMm:.6f}",f"lengthSource={w.lengthSource}",f"thicknessMm={w.thicknessMm:.6f}")
         center=msp.add_line((w.start.x,w.start.y),(w.end.x,w.end.y),dxfattribs={"layer":"GE360_WALLS","lineweight":13}); _tag(center,"wall-centerline",w.id)
-        mx=(w.start.x+w.end.x)/2; my=(w.start.y+w.end.y)/2; t=msp.add_text(f"{w.declaredLengthMm/1000:.2f} m",height=120,dxfattribs={"layer":"GE360_DIMENSIONS"}); t.set_placement((mx,my)); _tag(t,"dimension",w.id)
+        mx=(w.start.x+w.end.x)/2; my=(w.start.y+w.end.y)/2; t=msp.add_text(f"{w.calculatedLengthMm/1000:.2f} m",height=120,dxfattribs={"layer":"GE360_DIMENSIONS"}); t.set_placement((mx,my)); _tag(t,"dimension",w.id)
     for o in model.openings:
         w=wall_map.get(o.wallId)
         if not w: continue

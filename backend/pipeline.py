@@ -6,6 +6,7 @@ import uuid
 from datetime import datetime, timezone
 
 from backend.cad import build_cad_model, export_dxf, export_pdf, export_png, export_svg
+from backend.agent.prompt_loader import MAX_ERROR_TOLERANCE_RATIO
 from backend.config import Settings
 from backend.db import Database
 from backend.geometry.normalizer import normalize_payload
@@ -40,11 +41,11 @@ class Pipeline:
         )
         return {"success": True, "planId": payload.planId, "status": PlanStatus.RAW.value}
 
-    def process(self, plan_id: str) -> dict:
+    def process(self, plan_id: str, raw_override: dict | None = None) -> dict:
         started = time.perf_counter()
         created_at = datetime.now(timezone.utc).isoformat()
         self.db.set_status(plan_id, PlanStatus.PROCESSING, error="")
-        raw = self.storage.raw_payload(plan_id)
+        raw = raw_override if raw_override is not None else self.storage.raw_payload(plan_id)
         input_hash = self.storage.sha256_json(raw)
         version = self.storage.next_version(plan_id)
         out = self.storage.version_dir(plan_id, version)
@@ -69,6 +70,8 @@ class Pipeline:
 
         try:
             payload = PlanPayload.model_validate(raw)
+            if payload.planId and payload.planId != plan_id:
+                raise ValueError(f"raw revision belongs to {payload.planId}, expected {plan_id}")
             if not payload.planId:
                 payload = payload.model_copy(update={"planId": plan_id})
             normalized = normalize_payload(
@@ -98,12 +101,20 @@ class Pipeline:
                 "rejected": [],
                 "offline": False,
                 "instructionVersion": None,
-                "repairBudget": 0.30,
+                "errorToleranceRatio": MAX_ERROR_TOLERANCE_RATIO,
+                "estimatedErrorRatio": 0.0,
+                "overErrorTolerance": False,
                 "assessment": {},
                 "missingCapabilities": [],
             }
             score_before = None
-            if self.settings.ai_enabled and solved.needs_review:
+            agent_uncertainty = (
+                solved.needs_review
+                or bool(solved.undetermined_tees)
+                or bool(solved.sketch_shape_walls)
+                or any(meta.get("lengthSource") == "SKETCH" for meta in solved.wall_meta.values())
+            )
+            if self.settings.ai_enabled and agent_uncertainty:
                 try:
                     from backend.agent import GeometryAgent, OllamaClient
 
@@ -138,10 +149,19 @@ class Pipeline:
                         "rejected": run.rejected,
                         "offline": run.offline,
                         "instructionVersion": run.instruction_version,
-                        "repairBudget": run.repair_budget,
+                        "errorToleranceRatio": run.error_tolerance_ratio,
+                        "estimatedErrorRatio": run.estimated_error_ratio,
+                        "overErrorTolerance": run.estimated_error_ratio > run.error_tolerance_ratio,
                         "assessment": run.assessment,
                         "missingCapabilities": run.missing_capabilities,
                     }
+                    if agent_log["overErrorTolerance"]:
+                        solved.needs_review = True
+                        solved.warnings.append(
+                            f"IA: errore/incertezza residua {run.estimated_error_ratio:.0%} oltre "
+                            f"la tolleranza consentita {run.error_tolerance_ratio:.0%}; "
+                            "risultato prodotto comunque ma da revisionare"
+                        )
                 except Exception as exc:
                     agent_log.update(
                         {
@@ -252,7 +272,9 @@ class Pipeline:
                     "solverOperations": solved.operations,
                     "aiAvailable": agent_log["aiAvailable"],
                     "aiInstructionVersion": agent_log.get("instructionVersion"),
-                    "aiRepairBudget": agent_log.get("repairBudget"),
+                    "aiErrorToleranceRatio": agent_log.get("errorToleranceRatio"),
+                    "aiEstimatedErrorRatio": agent_log.get("estimatedErrorRatio"),
+                    "aiOverErrorTolerance": agent_log.get("overErrorTolerance"),
                     "aiAssessment": agent_log.get("assessment"),
                     "aiMissingCapabilities": agent_log.get("missingCapabilities"),
                     "aiProposals": agent_log["proposals"],

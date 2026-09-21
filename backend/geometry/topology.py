@@ -20,7 +20,8 @@ def build_topology(plan: NormalizedPlan, intersection_tolerance_mm: float=5.0) -
     dangling=[n for n,d in graph.degree() if d==1]
     intersections=[]; scale=plan.scale_mm_per_unit; lines=[]
     for wall in plan.walls:
-        lines.append((wall,LineString([(wall.sketch_a[0]*scale,wall.sketch_a[1]*scale),(wall.sketch_b[0]*scale,wall.sketch_b[1]*scale)])))
+        a=plan.nodes[wall.start_node]; b=plan.nodes[wall.end_node]
+        lines.append((wall,LineString([(a.sketch_x*scale,a.sketch_y*scale),(b.sketch_x*scale,b.sketch_y*scale)])))
     for i,(wa,la) in enumerate(lines):
         for wb,lb in lines[i+1:]:
             if {wa.start_node,wa.end_node}&{wb.start_node,wb.end_node}: continue

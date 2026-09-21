@@ -21,5 +21,5 @@ def export_svg(model:PlanModel,path:Path)->None:
         cx=sum(p.x for p in r.polygon)/len(r.polygon); cy=sum(p.y for p in r.polygon)/len(r.polygon); parts.append(f'<text class="room" x="{cx:.2f}" y="{cy:.2f}">{html.escape(r.name)}</text><text class="area" x="{cx:.2f}" y="{cy+150:.2f}">{r.floorAreaM2:.2f} m²</text>')
     parts.append('</g><g id="dimensions" text-anchor="middle">')
     for w in model.walls:
-        mx=(w.start.x+w.end.x)/2; my=(w.start.y+w.end.y)/2; parts.append(f'<text class="dim" x="{mx:.2f}" y="{my:.2f}">{w.declaredLengthMm/1000:.2f} m</text>')
+        mx=(w.start.x+w.end.x)/2; my=(w.start.y+w.end.y)/2; parts.append(f'<text class="dim" x="{mx:.2f}" y="{my:.2f}">{w.calculatedLengthMm/1000:.2f} m</text>')
     parts.append('</g>'); parts.append(f'<text x="{b.min_x+80:.2f}" y="{b.min_y+150:.2f}" font-size="150" font-weight="700">{html.escape(model.name)} · GE360 RILIEVO · unità mm</text></svg>'); path.write_text("\n".join(parts),encoding="utf-8")

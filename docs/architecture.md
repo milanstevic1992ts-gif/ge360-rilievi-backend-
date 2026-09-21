@@ -31,11 +31,11 @@ All solved geometry is millimetres. Frontend centimetres are converted once at t
 
 ## Jobs
 
-V1 uses an in-process `ThreadPoolExecutor`. `POST /process` first marks the record `QUEUED`, then a worker transitions it to `PROCESSING`. Only one active local job is allowed per `planId`. This is intentionally isolated behind `JobManager` so a future external queue can replace it without changing the API contract.
+V1 uses a SQLite-backed persistent job queue executed by an in-process `ThreadPoolExecutor`. Each job stores the RAW revision hash and snapshot it must process. Multiple newer revisions of the same `planId` may wait in `QUEUED`, but only one is `PROCESSING` at a time; jobs survive service restarts without changing the HTTP contract.
 
 ## AI boundary
 
-Ollama is optional. The default local model is Qwen3:8b. The planner receives inspected facts plus the versioned GE360 floorplan handbook and case-relevant few-shot examples, and may only propose named GE360 tools. Mutation happens on a deep-copied candidate. The candidate is accepted only if declared wall lengths and opening measurements are unchanged, topology/openings remain valid and the geometry score improves. Maximum five iterations. The agent is deliberately proactive and may attempt autonomous repair for a partial/problematic region up to an indicative 30% repair budget; larger/ambiguous reconstruction becomes NEEDS_REVIEW. Missing deterministic tools are reported as capability gaps, not replaced by invented coordinates. Ollama unavailability never blocks deterministic exports.
+Ollama is optional. The default local model is Qwen3:8b. The planner receives inspected facts plus the versioned GE360 floorplan handbook and case-relevant few-shot examples, and may only propose named GE360 tools. Mutation happens on a deep-copied candidate. The candidate is accepted only if declared wall lengths and opening measurements are unchanged, topology/openings remain valid and the geometry score improves. Maximum five iterations. The agent is deliberately proactive. The 30% value is the tolerated residual error/uncertainty ratio for problematic geometric elements, not a modification budget. The agent may try multiple sandbox repairs; above the threshold the best result is still produced and marked NEEDS_REVIEW. Missing deterministic tools are reported as capability gaps, not replaced by invented coordinates. Ollama unavailability never blocks deterministic exports.
 
 ## Storage/versioning
 
