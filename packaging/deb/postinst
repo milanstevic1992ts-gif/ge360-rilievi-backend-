@@ -36,7 +36,7 @@ fi
 chown root:"$SERVICE_GROUP" "$ENV_FILE" || true
 chmod 0640 "$ENV_FILE" || true
 
-# Enforce canonical local paths without overwriting unrelated user settings.
+# Enforce canonical local paths without overwriting user choices unrelated to packaging.
 if ! grep -q '^GE360_DATA_DIR=' "$ENV_FILE"; then
   printf '\nGE360_DATA_DIR=%s\n' "$DATA_DIR" >> "$ENV_FILE"
 fi
@@ -45,14 +45,6 @@ if ! grep -q '^GE360_DB_PATH=' "$ENV_FILE"; then
 fi
 if ! grep -q '^GE360_API_KEY_FILE=' "$ENV_FILE"; then
   printf 'GE360_API_KEY_FILE=%s/.api-key\n' "$DATA_DIR" >> "$ENV_FILE"
-fi
-
-# Keep the bundled EDIL MILAN STEVIC logo enabled across upgrades.
-DEFAULT_BRAND_LOGO="$APP_DIR/assets/branding/logo-edil-milan-stevic.jpg"
-if grep -q '^GE360_BRAND_LOGO=$' "$ENV_FILE"; then
-  sed -i "s|^GE360_BRAND_LOGO=$|GE360_BRAND_LOGO=$DEFAULT_BRAND_LOGO|" "$ENV_FILE"
-elif ! grep -q '^GE360_BRAND_LOGO=' "$ENV_FILE"; then
-  printf 'GE360_BRAND_LOGO=%s\n' "$DEFAULT_BRAND_LOGO" >> "$ENV_FILE"
 fi
 
 chmod 0755 "$APP_DIR/scripts/preflight.sh" 2>/dev/null || true
