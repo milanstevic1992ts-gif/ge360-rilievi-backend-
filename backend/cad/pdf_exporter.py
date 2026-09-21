@@ -198,7 +198,7 @@ def export_pdf(model: PlanModel, path: Path) -> None:
     y = summary_top - 18
     c.setFillColorRGB(0.06, 0.09, 0.16)
     c.setFont("Helvetica-Bold", 9.5)
-    c.drawString(x, y, "RIEPILOGO AMBIENTI")
+    c.drawString(x, y, "RIEPILOGO STANZE")
     y -= 15
     total_floor = sum(room.floorAreaM2 for room in model.rooms)
     available_rows = max(1, int((y - summary_bottom - 22) / 19))
