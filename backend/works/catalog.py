@@ -155,7 +155,13 @@ def resolve_works(model, raw_works: list[Any] | None) -> list[dict[str, Any]]:
                 "unit": str(raw.get("unit") or ""),
             }
 
-        rule = str(raw.get("quantityRule") or item.get("quantityRule") or "MANUAL")
+        # For known catalog items the backend catalog is authoritative. This also
+        # upgrades older frontend records that stored a now-obsolete MANUAL rule.
+        rule = str(
+            item.get("quantityRule")
+            if catalog_id in idx
+            else (raw.get("quantityRule") or item.get("quantityRule") or "MANUAL")
+        )
         target_type = str(raw.get("targetType") or "room")
         target_id = str(raw.get("targetId")) if raw.get("targetId") not in (None, "") else None
         target_ids = [str(x) for x in (raw.get("targetIds") or []) if str(x)]
