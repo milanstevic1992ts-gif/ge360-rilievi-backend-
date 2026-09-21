@@ -54,14 +54,17 @@ def test_svg_png_pdf_and_plan3d(tmp_path:Path):
     assert media_boxes
     assert all(float(height) > float(width) for width, height in media_boxes)
     assert b'EDIL MILAN STEVIC' in pdf_bytes
-    assert b'RIEPILOGO STANZE' in pdf_bytes
-    assert b"NOTE E CONDIZIONI D'USO DEL PRESENTE ELABORATO" in pdf_bytes
-    assert b'Natura del documento.' in pdf_bytes
-    assert b'Limitazione di responsabilit' in pdf_bytes
-    assert b'Riservatezza e divieto di diffusione.' in pdf_bytes
-    assert b'Validit' in pdf_bytes
-    assert b'LAVORAZIONI RILEVATE' in pdf_bytes
+    assert b'RILIEVO METRICO E PLANIMETRIA' in pdf_bytes
+    assert b'Planimetria generale' in pdf_bytes
+    assert b'Schede ambiente' in pdf_bytes
+    assert b'Riepilogo superfici' in pdf_bytes
+    assert b"Condizioni d'uso del rilievo" in pdf_bytes
+    assert b'Natura del rilievo.' in pdf_bytes
+    assert b'Verifica prima di ordini e lavorazioni.' in pdf_bytes
+    assert b'Misure ricavate per calcolo.' in pdf_bytes
+    assert b'Uso concordato e diffusione.' in pdf_bytes
     assert b'Pitturazione pareti + soffitto' in pdf_bytes
+    assert b'intelligenza artificiale' not in pdf_bytes.lower()
     data=json.loads(p3.read_text())
     assert data['units']=='mm'
     assert sorted(round(w['length']) for w in data['walls'])==[2000,2000,3000,3000]
