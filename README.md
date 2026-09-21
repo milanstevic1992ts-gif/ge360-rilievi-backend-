@@ -70,27 +70,71 @@ Con `GE360_API_KEY=` vuoto l'API parte in modalità sviluppo e registra un warni
 openssl rand -hex 32
 ```
 
-## GE360 DIRECT BRIDGE (WireGuard)
+## GE360 UNIVERSAL DIRECT BRIDGE (WireGuard)
 
-Il collegamento remoto nativo è **GE360 DIRECT BRIDGE**: WireGuard crea il tunnel e GE360 gestisce peer, QR, stato, diagnostica e revoca. Nessun Tailscale, relay o servizio cloud è necessario per il percorso Direct Bridge.
+Il collegamento remoto nativo è ora trattato come **infrastruttura GE360 condivisa**: un solo tunnel WireGuard persistente può servire Rilievi e altri backend GE360 senza creare una VPN diversa per ogni app.
 
-Installazione Debian:
+Architettura predefinita:
+
+```text
+Android / Tablet
+      |
+      | WireGuard UDP 51820
+      v
+Linux GE360
+  wg0 = 10.88.0.1/24
+      |
+      +-- Rilievi      TCP 9888
+      +-- Preventivi   TCP 9890
+      +-- Attrezzi     TCP 9891
+      +-- altre app...
+```
+
+Installazione/migrazione Rilievi:
 
 ```bash
 sudo bash scripts/install-direct-bridge.sh
 ```
 
-Poi aprire sul server:
+L'installer preserva l'identità WireGuard e il database dispositivi esistenti, crea il registro condiviso `/etc/ge360/direct-bridge/apps.d/` e registra Rilievi come prima app sulla porta 9888.
 
-```text
-http://127.0.0.1:9888/setup/
+Per installare soltanto il core riutilizzabile in un'altra repository:
+
+```bash
+sudo bash scripts/install-universal-bridge-core.sh
 ```
 
-Configurazione predefinita: `wg0`, rete `10.88.0.0/24`, server `10.88.0.1`, WireGuard UDP `51820`, backend `10.88.0.1:9888`. Il QR dispositivo è one-shot e la private key Android non viene persistita dal backend.
+Per registrare un altro backend:
 
-Dati e chiavi restano fuori da Git in `/etc/ge360/direct-bridge` e `/var/lib/ge360/direct-bridge`; `/etc/wireguard/wg0.conf` è soltanto il symlink usato da `wg-quick`; il file gestito vive nella sottocartella isolata `/etc/ge360/direct-bridge/wireguard/`.
+```bash
+sudo APP_ID=preventivi \
+APP_NAME="GE360 Preventivi" \
+APP_PORT=9890 \
+APP_SERVICE=ge360-preventivi-backend.service \
+APP_HEALTH_URL=http://127.0.0.1:9890/healthz \
+/usr/local/sbin/ge360-bridge-register-app
+```
 
-Dettagli completi, Android, CGNAT, test e rollback: `docs/direct-bridge.md`.
+Il firewall protegge automaticamente tutte le porte applicative registrate: sono accessibili da loopback e da `wg0`, non direttamente dalla WAN. Sul router va esposta soltanto WireGuard UDP 51820.
+
+Rilievi resta compatibile con `http://10.88.0.1:9888`, QR one-shot `GE360_DIRECT_BRIDGE_V1` e token dispositivo `ge360d_...`.
+
+Persistenza:
+
+```text
+/etc/ge360/direct-bridge
+/var/lib/ge360/direct-bridge
+```
+
+Questi percorsi non devono essere cancellati durante aggiornamenti o reinstallazioni: contengono identità server, configurazione WireGuard, profili applicativi e database dei dispositivi.
+
+Per generare un pacchetto riutilizzabile dalla repository:
+
+```bash
+bash scripts/export-universal-bridge-kit.sh
+```
+
+Dettagli: `docs/universal-direct-bridge.md` e `docs/direct-bridge.md`.
 
 ## Tailscale (opzionale/legacy)
 
