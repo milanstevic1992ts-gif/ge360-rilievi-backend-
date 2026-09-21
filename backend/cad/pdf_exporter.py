@@ -15,7 +15,7 @@ from backend.models import PlanModel
 BRAND_NAME = os.getenv("GE360_BRAND_NAME", "EDIL MILAN STEVIC")
 BRAND_SUBTITLE = os.getenv("GE360_BRAND_SUBTITLE", "Restauri & Costruzioni · Trieste e provincia")
 BRAND_TAGLINE = os.getenv("GE360_BRAND_TAGLINE", "Un artigiano, un unico referente")
-BRAND_LOGO = os.getenv("GE360_BRAND_LOGO", "").strip()
+BRAND_LOGO = os.getenv("GE360_BRAND_LOGO", "/opt/ge360/ge360-rilievi-backend/assets/branding/logo-edil-milan-stevic.jpg").strip()
 
 
 def _m(mm: float) -> str:

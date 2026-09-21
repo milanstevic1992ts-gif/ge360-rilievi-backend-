@@ -38,6 +38,14 @@ mkdir -p "$OUT_DIR" "$APP_DIR" "$PKG_ROOT/DEBIAN" "$PKG_ROOT/lib/systemd/system"
 
 rsync -a   --exclude '.git'   --exclude '.github'   --exclude '.venv'   --exclude '.env'   --exclude 'dist'   --exclude 'local-data'   --exclude '__pycache__'   --exclude '.pytest_cache'   --exclude 'tests'   "$ROOT/" "$APP_DIR/"
 
+# Materialize the bundled company logo inside the .deb.
+LOGO_B64="$APP_DIR/assets/branding/logo-edil-milan-stevic.jpg.b64"
+LOGO_JPG="$APP_DIR/assets/branding/logo-edil-milan-stevic.jpg"
+if [ -f "$LOGO_B64" ]; then
+  base64 -d "$LOGO_B64" > "$LOGO_JPG"
+  chmod 0644 "$LOGO_JPG"
+fi
+
 install -m 0644 "$ROOT/packaging/deb/ge360-rilievi-backend.service"   "$PKG_ROOT/lib/systemd/system/ge360-rilievi-backend.service"
 install -m 0755 "$ROOT/packaging/deb/preinst" "$PKG_ROOT/DEBIAN/preinst"
 install -m 0755 "$ROOT/packaging/deb/postinst" "$PKG_ROOT/DEBIAN/postinst"
