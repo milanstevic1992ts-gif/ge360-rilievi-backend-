@@ -11,10 +11,31 @@ jobs:
         with:
           python-version: '3.12'
           cache: pip
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
       - run: pip install -r requirements-dev.txt
       - run: python -m compileall -q backend
       - run: pytest -q
       - run: bash scripts/smoke-http.sh
+      - name: Cross backend/frontend jsdom E2E
+        run: |
+          git clone --depth 1 https://github.com/milanstevic1992ts-gif/ge360-open-plan3d.git frontend
+          npm install --prefix frontend --ignore-scripts
+          export GE360_API_KEY=ge360-cross-contract-key
+          export GE360_REQUIRE_API_KEY=true
+          export GE360_AI_ENABLED=false
+          export GE360_DATA_DIR="$RUNNER_TEMP/ge360-cross-data"
+          export GE360_DB_PATH="$RUNNER_TEMP/ge360-cross-data/ge360.sqlite3"
+          python -m uvicorn backend.main:app --host 127.0.0.1 --port 18888 >"$RUNNER_TEMP/ge360-cross-backend.log" 2>&1 &
+          PID=$!
+          cleanup(){ kill "$PID" 2>/dev/null || true; }
+          trap cleanup EXIT
+          for i in $(seq 1 120); do
+            curl -fsS http://127.0.0.1:18888/healthz >/dev/null 2>&1 && break
+            sleep .1
+          done
+          GE360_E2E_BASE_URL=http://127.0.0.1:18888/api/v1 GE360_E2E_API_KEY="$GE360_API_KEY" node frontend/scripts/test-live-backend.mjs
       - run: bash -n scripts/install-debian.sh
       - run: bash -n scripts/setup-tailscale.sh
       - run: bash -n scripts/install-direct-bridge.sh
