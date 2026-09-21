@@ -550,6 +550,9 @@ def versions(plan_id: str):
                 "quality": quality.get("status"),
                 "qualityDetail": quality or None,
                 "summary": manifest.get("summary"),
+                "totals": manifest.get("totals"),
+                "inputHash": manifest.get("inputHash"),
+                "previousVersion": manifest.get("previousVersion"),
                 "files": manifest.get("files", []),
             }
         )

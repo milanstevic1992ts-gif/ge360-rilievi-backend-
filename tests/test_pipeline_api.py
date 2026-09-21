@@ -57,6 +57,8 @@ def test_pipeline_versions_and_immutable_raw(tmp_path: Path):
     assert manifest["status"] == "PROCESSED" and manifest["createdAt"] and manifest["completedAt"]
     second = pipe.process("e2e")
     assert second["version"] == 2 and original.read_bytes() == before
+    manifest2 = json.loads((storage.plan_dir("e2e")/"versions/002/manifest.json").read_text())
+    assert manifest2["previousVersion"] == 1
     assert (storage.plan_dir("e2e")/"versions/001/plan.dxf").exists()
     assert (storage.plan_dir("e2e")/"versions/002/plan.dxf").exists()
 
@@ -152,6 +154,9 @@ def test_fastapi_polling_versions_files_security_and_cors(tmp_path: Path, monkey
     q2 = client.post("/api/v1/plans/api1/reprocess", headers=h).json(); assert wait_job(client, q2["jobId"], h)["status"] == "DONE"
     versions = client.get("/api/v1/plans/api1/versions", headers=h).json()
     assert [v["version"] for v in versions] == [2, 1] and all(v["quality"] == "OK" for v in versions)
+    assert versions[0]["previousVersion"] == 1 and versions[1]["previousVersion"] is None
+    assert all(v["inputHash"] for v in versions)
+    assert all("totals" in v for v in versions)
     assert client.get("/api/v1/plans/api1/versions/1/pdf", headers=h).content.startswith(b"%PDF")
     cors = client.options("/api/v1/plans", headers={"Origin": "https://app.ge360.test", "Access-Control-Request-Method": "POST"})
     assert cors.headers["access-control-allow-origin"] == "https://app.ge360.test"

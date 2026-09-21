@@ -56,6 +56,7 @@ class Pipeline:
             "status": PlanStatus.PROCESSING.value,
             "createdAt": created_at,
             "inputHash": input_hash,
+            "previousVersion": version - 1 if version > 1 else None,
             "files": [],
             "glb": None,
         }
@@ -250,6 +251,7 @@ class Pipeline:
                 "createdAt": created_at,
                 "completedAt": completed_at,
                 "inputHash": input_hash,
+                "previousVersion": version - 1 if version > 1 else None,
                 "quality": quality,
                 "summary": summary,
                 "totals": totals,
