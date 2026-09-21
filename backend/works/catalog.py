@@ -81,7 +81,7 @@ def resolve_works(model, raw_works: list[Any] | None) -> list[dict[str, Any]]:
             usable = [v for v in values if v is not None]
             if usable:
                 quantity = round(sum(usable), 4)
-                source = "authoritative-room-geometry"
+                source = "authoritative-plan-geometry" if target_type == "plan" else "authoritative-room-geometry"
         elif rule.startswith("PLAN_"):
             room_rule = "ROOM_" + rule[len("PLAN_"):]
             values = [_room_value(room, room_rule) for room in rooms.values()]
