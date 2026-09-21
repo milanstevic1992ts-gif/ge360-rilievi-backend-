@@ -7,8 +7,10 @@ on:
       - "backend/bridge/**"
       - "scripts/*bridge*.sh"
       - "scripts/ge360-boot-verify.sh"
+      - "frontend/android-sdk/**"
       - "config/bridge.env.example"
       - "packaging/deb/ge360-boot-verify.service"
+      - "packaging/desktop/ge360-universal-bridge.desktop"
       - "tests/test_direct_bridge.py"
       - ".github/workflows/bridge-checks.yml"
   pull_request:
@@ -16,8 +18,10 @@ on:
       - "backend/bridge/**"
       - "scripts/*bridge*.sh"
       - "scripts/ge360-boot-verify.sh"
+      - "frontend/android-sdk/**"
       - "config/bridge.env.example"
       - "packaging/deb/ge360-boot-verify.service"
+      - "packaging/desktop/ge360-universal-bridge.desktop"
       - "tests/test_direct_bridge.py"
       - ".github/workflows/bridge-checks.yml"
 
@@ -40,6 +44,19 @@ jobs:
           bash -n scripts/install-direct-bridge.sh
           bash -n scripts/install-universal-bridge-core.sh
           bash -n scripts/export-universal-bridge-kit.sh
+          bash -n scripts/ge360-bridge-network-auto.sh
+          bash -n scripts/ge360-bridge-wizard.sh
+          bash -n scripts/ge360-bridge-terminal-launcher.sh
+          bash -n scripts/install-bridge-desktop-launcher.sh
+          bash -n scripts/export-frontend-bridge-kit.sh
+
+      - name: Validate Android Bridge SDK contract
+        shell: bash
+        run: |
+          set -euo pipefail
+          grep -R 'GE360_DIRECT_BRIDGE_V1' frontend/android-sdk
+          grep -R 'com.wireguard.android:tunnel:1.0.20260102' frontend/android-sdk
+          grep -R 'LAN, BRIDGE, OFFLINE' frontend/android-sdk
 
       - name: Set up Python
         uses: actions/setup-python@v5
