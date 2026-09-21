@@ -1,0 +1,58 @@
+name: GE360 Bridge Checks
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "backend/bridge/**"
+      - "scripts/*bridge*.sh"
+      - "scripts/ge360-boot-verify.sh"
+      - "config/bridge.env.example"
+      - "packaging/deb/ge360-boot-verify.service"
+      - "tests/test_direct_bridge.py"
+      - ".github/workflows/bridge-checks.yml"
+  pull_request:
+    paths:
+      - "backend/bridge/**"
+      - "scripts/*bridge*.sh"
+      - "scripts/ge360-boot-verify.sh"
+      - "config/bridge.env.example"
+      - "packaging/deb/ge360-boot-verify.service"
+      - "tests/test_direct_bridge.py"
+      - ".github/workflows/bridge-checks.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  bridge-validation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate shell scripts
+        shell: bash
+        run: |
+          set -euo pipefail
+          bash -n scripts/direct-bridge-firewall.sh
+          bash -n scripts/ge360-boot-verify.sh
+          bash -n scripts/register-bridge-app.sh
+          bash -n scripts/install-direct-bridge.sh
+          bash -n scripts/install-universal-bridge-core.sh
+          bash -n scripts/export-universal-bridge-kit.sh
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Bridge test dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install pytest "qrcode[pil]>=7.4,<9"
+
+      - name: Compile Bridge package
+        run: python -m py_compile backend/bridge/*.py
+
+      - name: Run Direct Bridge tests
+        run: python -m pytest -q tests/test_direct_bridge.py
