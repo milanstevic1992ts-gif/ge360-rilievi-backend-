@@ -36,7 +36,7 @@ fi
 chown root:"$SERVICE_GROUP" "$ENV_FILE" || true
 chmod 0640 "$ENV_FILE" || true
 
-# Enforce canonical local paths without overwriting user choices unrelated to packaging.
+# Enforce canonical local paths without overwriting unrelated user settings.
 if ! grep -q '^GE360_DATA_DIR=' "$ENV_FILE"; then
   printf '\nGE360_DATA_DIR=%s\n' "$DATA_DIR" >> "$ENV_FILE"
 fi
@@ -49,91 +49,7 @@ fi
 
 # Keep the bundled EDIL MILAN STEVIC logo enabled across upgrades.
 DEFAULT_BRAND_LOGO="$APP_DIR/assets/branding/logo-edil-milan-stevic.jpg"
-if grep -q '^GE360_BRAND_LOGO=
-chmod 0755 "$APP_DIR/scripts/preflight.sh" 2>/dev/null || true
-chmod 0755 "$APP_DIR/scripts/install-direct-bridge.sh" 2>/dev/null || true
-
-# Recreate only if the venv is missing/broken; otherwise preserve it across upgrades.
-if [ ! -x "$APP_DIR/.venv/bin/python" ]; then
-  rm -rf "$APP_DIR/.venv"
-  if ! python3 -m venv "$APP_DIR/.venv"; then
-    fail_soft "python virtualenv creation failed; run $DIAG after fixing python3-venv"
-  fi
-fi
-
-if [ -x "$APP_DIR/.venv/bin/python" ]; then
-  REQ_HASH="$(sha256sum "$APP_DIR/requirements.txt" | awk '{print $1}')"
-  HASH_FILE="$APP_DIR/.venv/.ge360-requirements.sha256"
-  OLD_HASH=""
-  [ -f "$HASH_FILE" ] && OLD_HASH="$(cat "$HASH_FILE" 2>/dev/null || true)"
-  if [ "$REQ_HASH" != "$OLD_HASH" ]; then
-    "$APP_DIR/.venv/bin/python" -m pip install --disable-pip-version-check --upgrade pip || fail_soft "pip upgrade failed"
-    if "$APP_DIR/.venv/bin/python" -m pip install --disable-pip-version-check -r "$APP_DIR/requirements.txt"; then
-      printf '%s\n' "$REQ_HASH" > "$HASH_FILE"
-    else
-      fail_soft "Python dependencies could not be installed. Internet may be unavailable."
-    fi
-  fi
-fi
-
-KEY_FILE=$DATA_DIR/.api-key
-if [ ! -s "$KEY_FILE" ]; then
-  PY="$APP_DIR/.venv/bin/python"
-  [ -x "$PY" ] || PY=python3
-  "$PY" - "$KEY_FILE" <<'PY' || fail_soft "API key generation failed"
-from pathlib import Path
-import os, secrets, sys
-p = Path(sys.argv[1])
-p.parent.mkdir(parents=True, exist_ok=True)
-tmp = p.with_name(p.name + ".tmp")
-tmp.write_text(secrets.token_urlsafe(48) + "\n", encoding="utf-8")
-os.chmod(tmp, 0o600)
-os.replace(tmp, p)
-PY
-fi
-if [ -e "$KEY_FILE" ]; then
-  chown "$SERVICE_USER:$SERVICE_GROUP" "$KEY_FILE" || true
-  chmod 0600 "$KEY_FILE" || true
-fi
-
-# Code is immutable to the service, data remains writable.
-chown -R root:"$SERVICE_GROUP" "$APP_DIR" || true
-find "$APP_DIR" -type d -exec chmod g+rx {} + 2>/dev/null || true
-find "$APP_DIR" -type f -exec chmod g+r {} + 2>/dev/null || true
-find "$APP_DIR/.venv/bin" -type f -exec chmod g+rx {} + 2>/dev/null || true
-
-if command -v systemctl >/dev/null 2>&1; then
-  systemctl daemon-reload || true
-  systemctl enable "$SERVICE" >/dev/null 2>&1 || true
-  if [ -f "$APP_DIR/packaging/deb/ge360-boot-verify.service" ] && [ -f "$APP_DIR/scripts/ge360-boot-verify.sh" ]; then
-    install -m 0755 "$APP_DIR/scripts/ge360-boot-verify.sh" /usr/local/sbin/ge360-boot-verify || true
-    install -m 0644 "$APP_DIR/packaging/deb/ge360-boot-verify.service" /etc/systemd/system/ge360-boot-verify.service || true
-    systemctl daemon-reload || true
-    systemctl enable ge360-boot-verify.service >/dev/null 2>&1 || true
-  fi
-  if [ -d /run/systemd/system ]; then
-    if systemctl restart "$SERVICE"; then
-      echo "GE360: service started successfully."
-    else
-      echo
-      echo "GE360 WARNING: package installed, but service did not start."
-      echo "The package remains correctly configured. Diagnostic output follows:"
-      [ -x "$DIAG" ] && "$DIAG" || true
-    fi
-  fi
-fi
-
-echo
-echo "GE360 Rilievi Backend 1.5.1 installed."
-echo "Control panel : http://127.0.0.1:9888/control/"
-echo "Setup         : http://127.0.0.1:9888/setup/"
-echo "Status        : ge360-rilievi-status"
-echo "Diagnostics   : sudo ge360-rilievi-diagnose"
-echo "API key file  : $KEY_FILE"
-echo "Configuration : $ENV_FILE"
-echo "Direct Bridge : sudo GE360_SERVICE_USER=ge360 bash $APP_DIR/scripts/install-direct-bridge.sh"
-exit 0
- "$ENV_FILE"; then
+if grep -q '^GE360_BRAND_LOGO=$' "$ENV_FILE"; then
   sed -i "s|^GE360_BRAND_LOGO=$|GE360_BRAND_LOGO=$DEFAULT_BRAND_LOGO|" "$ENV_FILE"
 elif ! grep -q '^GE360_BRAND_LOGO=' "$ENV_FILE"; then
   printf 'GE360_BRAND_LOGO=%s\n' "$DEFAULT_BRAND_LOGO" >> "$ENV_FILE"
