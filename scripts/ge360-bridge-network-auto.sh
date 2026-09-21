@@ -43,7 +43,7 @@ PY
 WG_PORT="$(read_env_value "$ENV_FILE" GE360_BRIDGE_PORT || true)"
 WG_PORT="${WG_PORT:-51820}"
 
-LAN_IP="$(ip route get 1.1.1.1 2>/dev/null | awk 'match($0,/src ([0-9.]+)/,a){print a[1]; exit}' || true)"
+LAN_IP="$(ip route get 1.1.1.1 2>/dev/null | sed -n 's/.* src \\([0-9.]*\\).*/\\1/p' | head -1 || true)"
 
 IPV6="$(python3 - <<'PY'
 import json, subprocess, ipaddress
@@ -98,6 +98,18 @@ else:
 PY
 )"
 
+
+# Cooperate with common host firewalls when they are already enabled.
+HOST_FIREWALL="nftables"
+if command -v ufw >/dev/null 2>&1 && ufw status 2>/dev/null | grep -qi '^Status: active'; then
+  ufw allow "${WG_PORT}/udp" comment 'GE360 Universal Bridge' >/dev/null 2>&1 || true
+  HOST_FIREWALL="ufw"
+elif command -v firewall-cmd >/dev/null 2>&1 && systemctl is-active --quiet firewalld 2>/dev/null; then
+  firewall-cmd --permanent --add-port="${WG_PORT}/udp" >/dev/null 2>&1 || true
+  firewall-cmd --reload >/dev/null 2>&1 || true
+  HOST_FIREWALL="firewalld"
+fi
+
 ENDPOINT=""
 METHOD=""
 REMOTE_STATE="BLOCKED"
@@ -139,7 +151,7 @@ if $APPLY && [[ -n "$ENDPOINT" ]]; then
   fi
 fi
 
-python3 - "$STATE_FILE" "$LAN_IP" "$IPV6" "$EXTERNAL_IPV4" "$IPV4_CLASS" "$ENDPOINT" "$METHOD" "$REMOTE_STATE" "$PORT_MAPPING" "$UPNP_ERROR" "$PORT_MAPPING_ERROR" "$WG_PORT" <<'PY'
+python3 - "$STATE_FILE" "$LAN_IP" "$IPV6" "$EXTERNAL_IPV4" "$IPV4_CLASS" "$ENDPOINT" "$METHOD" "$REMOTE_STATE" "$PORT_MAPPING" "$UPNP_ERROR" "$PORT_MAPPING_ERROR" "$WG_PORT" "$HOST_FIREWALL" <<'PY'
 from pathlib import Path
 import json,sys,datetime
 p=Path(sys.argv[1])
@@ -156,6 +168,7 @@ data={
  "upnp_error":sys.argv[10] or None,
  "port_mapping_error":sys.argv[11] or None,
  "wireguard_udp_port":int(sys.argv[12]),
+ "host_firewall":sys.argv[13],
 }
 p.parent.mkdir(parents=True,exist_ok=True)
 p.write_text(json.dumps(data,indent=2)+"\n",encoding="utf-8")
