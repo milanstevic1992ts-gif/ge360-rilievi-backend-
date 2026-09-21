@@ -96,7 +96,7 @@ def append_usage_terms_page(
     c.rect(margin_x, y - 2, 3, 19, stroke=0, fill=1)
     c.setFillColorRGB(*blue)
     c.setFont("Helvetica-Bold", 15)
-    c.drawString(margin_x + 10, y, "05  Condizioni d'uso del rilievo")
+    c.drawString(margin_x + 10, y, "06  Condizioni d'uso del rilievo")
     y -= 30
 
     body_font = "Helvetica"
