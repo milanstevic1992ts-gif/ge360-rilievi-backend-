@@ -1,0 +1,13 @@
+<!-- Merge these settings into the app module AndroidManifest.xml. -->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <uses-permission android:name="android.permission.INTERNET" />
+
+    <application
+        android:usesCleartextTraffic="true">
+        <!--
+          The WireGuard tunnel AAR contributes GoBackend$VpnService through
+          manifest merging. android:usesCleartextTraffic is required because
+          current GE360 backend URLs are HTTP inside the encrypted WireGuard/LAN.
+        -->
+    </application>
+</manifest>
