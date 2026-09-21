@@ -61,4 +61,44 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
     constraints=[]
     for idx,op in enumerate(solved.operations,1):
         if op.get("type")=="orthogonal_component": constraints.append(ConstraintModel(id=f"solver-{idx}",kind=ConstraintKind.PERPENDICULAR,nodeIds=op.get("nodes",[]),metadata=op))
-    return PlanModel(planId=plan.plan_id,name=plan.name,nodes=nodes,walls=walls,openings=openings,rooms=rooms,constraints=constraints,notes=plan.notes,warnings=warnings,needsReview=needs_review,metadata={"sourceVersion":plan.raw_payload.get("version",4),"scaleMmPerSketchUnit":plan.scale_mm_per_unit,"mergedEndpointMaxGapMm":max(plan.merged_gaps_mm,default=0.0),"solverOperations":solved.operations,"decisions":solved.decisions,"uncertainty":uncertainty,"wallReference":plan.wall_reference,"baseAngleDeg":solved.base_angle_deg,"suspects":solved.suspects,"diagonals":solved.diagonal_meta,"closedGaps":plan.closed_gaps,"tJunctions":plan.tees})
+    raw = plan.raw_payload
+    document_meta = {
+        "client": raw.get("client") or raw.get("cliente") or raw.get("customerName"),
+        "address": raw.get("address") or raw.get("indirizzo") or raw.get("siteAddress"),
+        "surveyDate": raw.get("surveyDate") or raw.get("sopralluogoAt") or raw.get("updatedAt"),
+        "reference": raw.get("reference") or raw.get("surveyReference") or raw.get("rilievoRef") or plan.plan_id,
+        "linkedQuote": raw.get("linkedQuote") or raw.get("preventivoCollegato"),
+        "unitLabel": raw.get("unitLabel") or raw.get("floorLabel") or raw.get("piano"),
+        "northAngleDeg": raw.get("northAngleDeg"),
+        "whatsappUrl": raw.get("whatsappUrl"),
+        "siteUrl": raw.get("siteUrl"),
+    }
+    document_meta = {key: value for key, value in document_meta.items() if value not in (None, "")}
+
+    return PlanModel(
+        planId=plan.plan_id,
+        name=plan.name,
+        nodes=nodes,
+        walls=walls,
+        openings=openings,
+        rooms=rooms,
+        constraints=constraints,
+        notes=plan.notes,
+        warnings=warnings,
+        needsReview=needs_review,
+        metadata={
+            "sourceVersion": plan.raw_payload.get("version", 4),
+            "scaleMmPerSketchUnit": plan.scale_mm_per_unit,
+            "mergedEndpointMaxGapMm": max(plan.merged_gaps_mm, default=0.0),
+            "solverOperations": solved.operations,
+            "decisions": solved.decisions,
+            "uncertainty": uncertainty,
+            "wallReference": plan.wall_reference,
+            "baseAngleDeg": solved.base_angle_deg,
+            "suspects": solved.suspects,
+            "diagonals": solved.diagonal_meta,
+            "closedGaps": plan.closed_gaps,
+            "tJunctions": plan.tees,
+            "document": document_meta,
+        },
+    )
