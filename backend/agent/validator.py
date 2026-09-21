@@ -36,9 +36,15 @@ def measurements_preserved(snapshot: dict, plan: NormalizedPlan, solved: SolverR
     }
     if snapshot["openings"] != current_openings:
         return False, "authoritative opening measurements changed"
-    max_error = max((float(meta.get("lengthErrorMm", 0)) for meta in solved.wall_meta.values()), default=0.0)
-    if max_error > tolerance_mm:
-        return False, f"length error {max_error:.3f} mm exceeds tolerance"
+    baseline_out = snapshot.get("outOfTolerance")
+    out = sorted(wid for wid, meta in solved.wall_meta.items() if meta.get("measured", True) and not meta.get("withinTolerance", True))
+    if baseline_out is not None:
+        if len(out) > len(baseline_out):
+            return False, f"more walls out of survey tolerance: {', '.join(out)}"
+    else:
+        max_error = max((float(meta.get("lengthErrorMm", 0)) for meta in solved.wall_meta.values()), default=0.0)
+        if max_error > max(tolerance_mm, 10.0):
+            return False, f"length error {max_error:.3f} mm exceeds tolerance"
     return True, "ok"
 
 

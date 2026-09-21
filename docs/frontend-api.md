@@ -75,3 +75,74 @@ The frontend only needs to keep the API base URL and API key, submit the v4 payl
 ## Real HTTP smoke test
 
 `scripts/smoke-http.sh` starts a temporary Uvicorn instance, sends the same v4 fixture used by the frontend contract test, waits for the asynchronous job, downloads JSON/PNG/SVG/PDF/DXF/plan3d and validates the authoritative wall lengths plus the door width/offset. This script runs in CI in addition to pytest.
+
+## Rilievo fedele v2
+
+### Nuovi campi nel payload (tutti opzionali, retrocompatibili)
+
+| Campo | Significato |
+|---|---|
+| `walls[].lengthCm = null` | Parete non misurata. Se è ricavabile dalle altre misure viene **calcolata** (`lengthSource: "CALCULATED"`, lo schizzo non la influenza); solo se non è ricavabile si usa lo schizzo (`"SKETCH"`, stanza `ESTIMATED` e domanda "serve la misura"). Serve almeno una parete misurata. |
+| `diagonals[]` | `{id, a:{x,y}, b:{x,y}, lengthCm}` misura di controllo tra due angoli. Fissa la forma esatta delle stanze fuori squadra. |
+| `wallReference` | `interior` (default: ogni linea è il filo interno misurato), `partitionAxis` (perimetro a filo interno, tramezzi in asse: si scala mezzo spessore per lato), `axis` (tutte le pareti in asse). |
+| `rooms[].type` | `bagno`, `cucina`, `camera`, `soggiorno`, `disimpegno`, `ripostiglio`, `studio`, `esterno`, `altro`. Se assente viene dedotto dal nome (o proposto dall'IA). |
+| `rooms[].heightCm` | Altezza della stanza se diversa da `wallHeightM`. |
+| `rooms[].tilingHeightCm` | Altezza del rivestimento (default 220 cm per i bagni). |
+
+`planId` deve rispettare `^[A-Za-z0-9_-]{1,64}$` (altrimenti 422).
+
+### Tolleranza
+
+Un lato è accettato se `|calcolato - dichiarato| <= max(GE360_ACCEPT_ABS_MM, GE360_ACCEPT_REL * L)`
+(default 10 mm / 0,5%). Il piccolo errore di chiusura viene distribuito su tutti i lati.
+Le misure dichiarate non vengono mai modificate.
+
+### Cosa fa il backend sullo schizzo grezzo
+
+- raddrizza gli angoli parete per parete (ortogonali, 45°, liberi);
+- aggancia estremi vicini, chiude varchi fino a `GE360_AUTO_CLOSE_MM` (600 mm);
+- trasforma i tramezzi che non toccano la parete in innesti a T;
+- corregge le proporzioni usando solo le misure;
+- se le misure non chiudono cerca la misura sbagliata e propone il valore coerente (`suspect`).
+
+### Risposta: nuovi campi
+
+`GET /api/v1/plans/{planId}` e la risposta del job contengono `totals`:
+
+```json
+{
+  "rooms": 5, "floorAreaM2": 63.0, "grossFloorAreaM2": 63.0, "ceilingAreaM2": 63.0,
+  "grossWallAreaM2": 170.1, "netWallAreaM2": 161.4, "openingsAreaM2": 8.7,
+  "revealsAreaM2": 2.1, "tilingAreaM2": 17.4, "paintAreaM2": 210.3,
+  "skirtingM": 88.2, "volumeM3": 170.1, "doors": 5, "windows": 4,
+  "estimatedWalls": [], "suspectWalls": [], "questions": ["Bagno: ..."], "aiSummary": null
+}
+```
+
+Ogni stanza in `processed-plan.json` (`rooms[]`) contiene, oltre ai campi V1:
+
+- `type`, `floorAreaM2` (netta), `grossFloorAreaM2`, `ceilingAreaM2`, `ceilingType`, `heightMm`, `volumeM3`, `widthM`, `depthM`;
+- `perimeterM`, `skirtingM` (perimetro meno porte);
+- `grossWallAreaM2`, `openingsAreaM2`, `netWallAreaM2`, `revealsAreaM2` (spallette), `tilingHeightMm`, `tilingAreaM2`, `paintAreaM2` (pareti nette − rivestimento + spallette + soffitto);
+- `wallFaces[]`: per ogni parete vista dalla stanza `wallId, lengthMm, heightMm, grossAreaM2, openingIds, openingsAreaM2, netAreaM2, revealAreaM2, tilingAreaM2, shared`;
+- `openings[]`: `id, type, wallId, widthMm, heightMm, sillHeightMm, areaM2, revealAreaM2, connectsToRoomId`;
+- `adjacentRoomIds`, `estimatedWallIds`, `maxWallErrorMm`, `confidence` (0-1), `quality`, `questions[]`.
+
+Ogni parete (`walls[]`) contiene `measured, lengthSource (MEASURED|CALCULATED|SKETCH), lengthErrorMm, toleranceMm, withinTolerance, suspect, suggestedLengthMm`.
+Per le pareti non misurate `declaredLengthMm` è la lunghezza calcolata (è quella stampata su DXF/PDF/PNG).
+
+### Lo schizzo è solo una traccia
+
+Il disegno serve a capire *come* sono collegate le pareti e se un muro è orizzontale, verticale o obliquo.
+Le lunghezze, le aree e la posizione dei tramezzi vengono dalle misure. Il backend verifica matematicamente
+(spazio nullo dello Jacobiano) cosa è ricavabile dalle sole misure: tutto ciò che lo è viene ricalcolato
+ignorando lo schizzo; ciò che non lo è viene marcato e trasformato in una domanda precisa
+(misura mancante, posizione di un tramezzo, diagonale per una parete obliqua).
+`quality` include `suspects`, `diagonals` e la regola `acceptance`.
+
+### IA (opzionale, `GE360_AI_ENABLED=true`)
+
+L'IA non riceve né modifica coordinate o misure. Propone nome e tipo per le stanze senza nome
+(i nomi dati dall'utente non vengono mai sovrascritti), riformula le incoerenze in domande e scrive
+un riassunto (`totals.aiSummary`, `processed.metadata.ai`). Se Ollama è spento il risultato è identico
+ma senza questi extra.

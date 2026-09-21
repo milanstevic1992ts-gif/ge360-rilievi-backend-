@@ -43,6 +43,13 @@ class Settings:
         "capacitor://localhost",
     )
     job_workers: int = 2
+    # --- Rilievo fedele (solver v2) ---
+    accept_abs_mm: float = 10.0          # scarto accettato per lato: max(accept_abs_mm, accept_rel * L)
+    accept_rel: float = 0.005
+    measure_sigma_mm: float = 5.0        # incertezza tipica di una misura laser/metro
+    auto_close_mm: float = 600.0         # chiusura automatica di varchi nello schizzo
+    diagonal_snap_deg: float = 12.0      # aggancio pareti a 45° (smussi)
+    bath_tiling_height_mm: float = 2200.0
 
 
 def get_settings() -> Settings:
@@ -67,4 +74,10 @@ def get_settings() -> Settings:
             ("http://localhost", "http://127.0.0.1", "https://localhost", "capacitor://localhost"),
         ),
         job_workers=max(1, int(os.getenv("GE360_JOB_WORKERS", "2"))),
+        accept_abs_mm=float(os.getenv("GE360_ACCEPT_ABS_MM", "10")),
+        accept_rel=float(os.getenv("GE360_ACCEPT_REL", "0.005")),
+        measure_sigma_mm=float(os.getenv("GE360_MEASURE_SIGMA_MM", "5")),
+        auto_close_mm=float(os.getenv("GE360_AUTO_CLOSE_MM", "600")),
+        diagonal_snap_deg=float(os.getenv("GE360_DIAGONAL_SNAP_DEG", "12")),
+        bath_tiling_height_mm=float(os.getenv("GE360_BATH_TILING_HEIGHT_MM", "2200")),
     )

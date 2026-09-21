@@ -127,7 +127,11 @@ def test_case_j_incompatible_lengths_needs_review():
     assert solved.needs_review
     assert validation["needsReview"]
     assert solved.closure_error_mm > 50
-    assert_lengths(model,tol=0.5)
+    # le misure dichiarate non vengono mai toccate
+    assert [w.declaredLengthMm for w in model.walls]==[2000,3000,2000,2900]
+    # 300 contro 290 su lati opposti: il solver non può sapere quale sia sbagliata -> le segnala entrambe
+    assert {s["wallId"] for s in solved.suspects}=={"w2","w4"}
+    assert len(model.rooms)==1
 
 
 def test_case_k_wildly_disproportionate_sketch_uses_measurements():

@@ -37,7 +37,7 @@ if not read_runtime_api_key(settings):
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
-app = FastAPI(title="GE360 Rilievi Backend", version="1.3.1")
+app = FastAPI(title="GE360 Rilievi Backend", version="1.4.0")
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
@@ -213,7 +213,7 @@ def health():
     return {
         "ok": True,
         "service": "ge360-rilievi-backend",
-        "version": "1.3.1",
+        "version": "1.4.0",
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(read_runtime_api_key(settings)),
         "setupUrl": "/setup/",
@@ -374,6 +374,7 @@ def plan_status(plan_id: str):
         "needsReview": row["needsReview"],
         "quality": row["quality"],
         "summary": summary,
+        "totals": current_manifest.get("totals"),
         "files": _current_file_links(plan_id),
         "updatedAt": row["updated_at"],
         "lastError": row["last_error"],

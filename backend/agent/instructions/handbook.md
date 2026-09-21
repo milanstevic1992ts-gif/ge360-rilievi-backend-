@@ -195,3 +195,19 @@ Se manca un tool, usa missingCapabilities, per esempio:
     }
   ]
 }
+
+## Rilievo fedele v2 (solver deterministico)
+
+Prima che tu intervenga, il solver ha già fatto il lavoro metrico:
+
+- ogni lato misurato ha un'incertezza di qualche millimetro: un rilievo è **accettato** se ogni lato
+  resta entro `max(1 cm; 0,5% della lunghezza)`. Non proporre operazioni per scarti dentro questa soglia;
+- gli angoli dello schizzo sono già raddrizzati parete per parete (quasi-90° → 90°, quasi-45° → 45°,
+  il resto libero). Uno smusso reale non va forzato a 90°;
+- varchi, tramezzi che non toccano la parete (innesti a T) e lati non misurati sono già gestiti;
+- se una misura è incoerente il solver prova a escluderla e, se è l'unica colpevole, adotta la
+  geometria coerente e segnala la parete come `suspect` con la lunghezza suggerita.
+
+Il 30% sopra resta il limite di quanta struttura puoi riparare in autonomia: **non è una tolleranza
+sulle misure**. Il tuo compito principale è interpretare (nomi e tipi delle stanze, domande all'utente),
+non spostare geometria.

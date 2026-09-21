@@ -9,13 +9,17 @@ def _clean(v:float)->float:
     v=round(float(v),6)
     return 0.0 if abs(v)<1e-6 else v
 
-def build_cad_model(plan:NormalizedPlan,solved:SolverResult)->PlanModel:
-    rooms=detect_rooms(plan,solved); warnings=list(solved.warnings); needs_review=solved.needs_review
+def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height_mm:float=2200.0,room_hints:dict|None=None)->PlanModel:
+    warnings=list(solved.warnings); needs_review=solved.needs_review
     nodes=[NodeModel(id=nid,point=PointMM(x=_clean(solved.node_positions[nid][0]),y=_clean(solved.node_positions[nid][1])),sourceEndpoints=node.source_endpoints) for nid,node in plan.nodes.items()]
     walls=[]; wall_map={w.id:w for w in plan.walls}
     for wall in plan.walls:
         a=solved.node_positions[wall.start_node]; b=solved.node_positions[wall.end_node]; calc=math.hypot(b[0]-a[0],b[1]-a[1])
-        walls.append(WallModel(id=wall.id,startNodeId=wall.start_node,endNodeId=wall.end_node,start=PointMM(x=_clean(a[0]),y=_clean(a[1])),end=PointMM(x=_clean(b[0]),y=_clean(b[1])),declaredLengthMm=wall.length_mm,calculatedLengthMm=calc,sourceLengthCm=wall.source_length_cm,heightMm=wall.height_mm,thicknessMm=wall.thickness_mm,sourceStroke={"strokeId":wall.raw.get("strokeId"),"a":{"x":wall.sketch_a[0],"y":wall.sketch_a[1]},"b":{"x":wall.sketch_b[0],"y":wall.sketch_b[1]}},quality="NEEDS_REVIEW" if abs(calc-wall.length_mm)>0.5 else "OK",orientation=solved.wall_meta[wall.id]["orientation"]))
+        meta=solved.wall_meta.get(wall.id,{})
+        within=bool(meta.get("withinTolerance",True))
+        source=meta.get("lengthSource","MEASURED" if wall.measured else "SKETCH")
+        quality="NEEDS_REVIEW" if not within else {"MEASURED":"OK","CALCULATED":"CALCULATED"}.get(source,"ESTIMATED")
+        walls.append(WallModel(id=wall.id,startNodeId=wall.start_node,endNodeId=wall.end_node,start=PointMM(x=_clean(a[0]),y=_clean(a[1])),end=PointMM(x=_clean(b[0]),y=_clean(b[1])),declaredLengthMm=wall.length_mm if wall.measured else round(calc,1),calculatedLengthMm=calc,sourceLengthCm=wall.source_length_cm,heightMm=wall.height_mm,thicknessMm=wall.thickness_mm,sourceStroke={"strokeId":wall.raw.get("strokeId"),"a":{"x":wall.sketch_a[0],"y":wall.sketch_a[1]},"b":{"x":wall.sketch_b[0],"y":wall.sketch_b[1]}},quality=quality,orientation=meta.get("orientation","free"),measured=wall.measured,lengthErrorMm=round(abs(calc-wall.length_mm),3),toleranceMm=round(float(meta.get("toleranceMm",0.0)),3),withinTolerance=within,suspect=bool(meta.get("suspect")),suggestedLengthMm=meta.get("suggestedLengthMm"),lengthSource=source))
     openings=[]
     for raw in plan.openings:
         wall=wall_map.get(raw.get("wallId"))
@@ -39,7 +43,8 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult)->PlanModel:
         elif raw.get("sillHeightCm") is not None: sill,ssrc=float(raw["sillHeightCm"])*10,"USER_CM"
         else: sill,ssrc=(0.0 if raw.get("type")=="door" else 900.0),"DEFAULT"
         openings.append(OpeningModel(id=str(raw.get("id")),type=raw.get("type","door"),wallId=wall.id,widthMm=width_mm,heightMm=height_mm,offsetMm=offset_mm,referenceEnd=reference,sillHeightMm=sill,centerFromStartMm=center_from_a,center=PointMM(x=_clean(cx),y=_clean(cy)),heightSource=hsrc,sillHeightSource=ssrc))
+    rooms=detect_rooms(plan,solved,openings,bath_tiling_height_mm=bath_tiling_height_mm,room_hints=room_hints)
     constraints=[]
     for idx,op in enumerate(solved.operations,1):
         if op.get("type")=="orthogonal_component": constraints.append(ConstraintModel(id=f"solver-{idx}",kind=ConstraintKind.PERPENDICULAR,nodeIds=op.get("nodes",[]),metadata=op))
-    return PlanModel(planId=plan.plan_id,name=plan.name,nodes=nodes,walls=walls,openings=openings,rooms=rooms,constraints=constraints,notes=plan.notes,warnings=warnings,needsReview=needs_review,metadata={"sourceVersion":plan.raw_payload.get("version",4),"scaleMmPerSketchUnit":plan.scale_mm_per_unit,"mergedEndpointMaxGapMm":max(plan.merged_gaps_mm,default=0.0),"solverOperations":solved.operations})
+    return PlanModel(planId=plan.plan_id,name=plan.name,nodes=nodes,walls=walls,openings=openings,rooms=rooms,constraints=constraints,notes=plan.notes,warnings=warnings,needsReview=needs_review,metadata={"sourceVersion":plan.raw_payload.get("version",4),"scaleMmPerSketchUnit":plan.scale_mm_per_unit,"mergedEndpointMaxGapMm":max(plan.merged_gaps_mm,default=0.0),"solverOperations":solved.operations,"wallReference":plan.wall_reference,"baseAngleDeg":solved.base_angle_deg,"suspects":solved.suspects,"diagonals":solved.diagonal_meta,"closedGaps":plan.closed_gaps,"tJunctions":plan.tees})

@@ -24,6 +24,16 @@ Implementato e coperto da test:
 - adapter opzionali per archit-app/openPlan3D; ArchLang è esplicitamente `NOT_USED_V1`;
 - systemd, Docker e CI GitHub Actions.
 
+### Rilievo fedele (v1.4)
+
+- schizzo grezzo → planimetria metrica: angoli raddrizzati parete per parete (90°/45°/liberi), varchi chiusi, tramezzi agganciati a T, proporzioni corrette dalle misure;
+- tolleranza realistica per lato `max(1 cm; 0,5%)`, errore di chiusura distribuito, misura sbagliata individuata e segnalata;
+- pareti non misurate, diagonali di controllo, `wallReference` (filo interno / tramezzi in asse);
+- computo per stanza: pavimento, soffitto, pareti lorde/nette faccia per faccia, aperture, spallette, rivestimento, pittura, battiscopa, volume, adiacenze, domande;
+- IA opzionale solo interpretativa (nomi/tipi stanze, domande, riassunto).
+
+Dettagli: `docs/frontend-api.md` → "Rilievo fedele v2".
+
 **Non inclusi nel percorso V1:** Telegram e generazione GLB. `GET /api/v1/plans/{planId}/glb` restituisce 404 intenzionalmente. `plan3d.json` è il formato 3D autorevole per questa fase.
 
 ## Flusso frontend

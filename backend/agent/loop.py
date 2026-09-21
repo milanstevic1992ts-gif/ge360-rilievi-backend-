@@ -34,8 +34,9 @@ class AgentRun:
 
 class GeometryAgent:
     def __init__(self, client: OllamaClient, max_iterations: int = 5, length_tolerance_mm: float = 0.5,
-                 orthogonal_tolerance_deg: float = 25.0):
+                 orthogonal_tolerance_deg: float = 25.0, solver_kwargs: dict | None = None):
         self.planner = AgentPlanner(client)
+        self.solver_kwargs = dict(solver_kwargs or {})
         self.max_iterations = min(5, max(1, max_iterations))
         self.length_tolerance_mm = length_tolerance_mm
         self.orthogonal_tolerance_deg = orthogonal_tolerance_deg
@@ -52,6 +53,10 @@ class GeometryAgent:
         overrides: dict[str, float] = {}
         score = self._score(working_plan, current)
         snapshot = authoritative_snapshot(working_plan)
+        snapshot["outOfTolerance"] = sorted(
+            wid for wid, meta in solved.wall_meta.items()
+            if meta.get("measured", True) and not meta.get("withinTolerance", True)
+        )
         run = AgentRun(working_plan, working_topology, current)
 
         for iteration in range(self.max_iterations):
@@ -92,6 +97,7 @@ class GeometryAgent:
                     orthogonal_tolerance_deg=self.orthogonal_tolerance_deg,
                     length_tolerance_mm=self.length_tolerance_mm,
                     angle_overrides=candidate_overrides,
+                    **self.solver_kwargs,
                 )
                 gate = validate_candidate(snapshot, candidate_plan, candidate_topology, candidate, score, self.length_tolerance_mm)
                 if gate.accepted:

@@ -76,14 +76,18 @@ class Pipeline:
                 default_thickness_mm=self.settings.default_wall_thickness_mm,
                 default_height_mm=self.settings.default_wall_height_mm,
                 snap_tolerance_mm=self.settings.snap_tolerance_mm,
+                auto_close_mm=self.settings.auto_close_mm,
             )
             topology = build_topology(normalized)
+            survey_kwargs = self._survey_kwargs()
             solved = solve_geometry(
                 normalized,
                 topology,
                 orthogonal_tolerance_deg=self.settings.orthogonal_tolerance_deg,
                 length_tolerance_mm=self.settings.length_tolerance_mm,
+                **survey_kwargs,
             )
+            tiling_h = self.settings.bath_tiling_height_mm
 
             agent_log = {
                 "enabled": self.settings.ai_enabled,
@@ -103,7 +107,7 @@ class Pipeline:
                 try:
                     from backend.agent import GeometryAgent, OllamaClient
 
-                    pre_model = build_cad_model(normalized, solved)
+                    pre_model = build_cad_model(normalized, solved, bath_tiling_height_mm=tiling_h)
                     pre_val = validate_geometry(
                         normalized,
                         solved,
@@ -120,6 +124,7 @@ class Pipeline:
                         5,
                         self.settings.length_tolerance_mm,
                         self.settings.orthogonal_tolerance_deg,
+                        solver_kwargs=survey_kwargs,
                     ).improve(normalized, topology, solved)
                     normalized = run.plan
                     topology = run.topology
@@ -146,7 +151,28 @@ class Pipeline:
                         }
                     )
 
-            model = build_cad_model(normalized, solved)
+            model = build_cad_model(normalized, solved, bath_tiling_height_mm=tiling_h)
+            interpretation = None
+            if self.settings.ai_enabled:
+                from backend.agent import OllamaClient
+                from backend.agent.interpreter import interpret
+
+                interpretation = interpret(
+                    OllamaClient(self.settings.ollama_url, self.settings.ollama_model, self.settings.ollama_timeout),
+                    model,
+                )
+                if interpretation["roomHints"]:
+                    model = build_cad_model(
+                        normalized, solved, bath_tiling_height_mm=tiling_h, room_hints=interpretation["roomHints"]
+                    )
+                model.metadata["ai"] = {
+                    "available": interpretation["available"],
+                    "version": interpretation["version"],
+                    "questions": interpretation["questions"],
+                    "summary": interpretation["summary"],
+                    "roomHints": interpretation["roomHints"],
+                }
+            agent_log["interpreter"] = interpretation
             validation = validate_geometry(
                 normalized,
                 solved,
@@ -156,10 +182,11 @@ class Pipeline:
             model.needsReview = bool(model.needsReview or validation["needsReview"])
             score = geometry_score(validation, len(model.rooms))
             max_gap = float(model.metadata.get("mergedEndpointMaxGapMm", 0))
+            estimated = any(r.quality == QualityStatus.ESTIMATED for r in model.rooms)
             quality_status = (
                 QualityStatus.NEEDS_REVIEW
                 if model.needsReview
-                else (QualityStatus.ESTIMATED if max_gap > 10 else QualityStatus.OK)
+                else (QualityStatus.ESTIMATED if estimated else QualityStatus.OK)
             )
             quality = {
                 "status": quality_status.value,
@@ -168,8 +195,17 @@ class Pipeline:
                 "geometryScore": score,
                 "warnings": validation["warnings"],
                 "errors": validation["errors"],
+                "suspects": validation["suspects"],
+                "diagonals": validation["diagonals"],
+                "acceptance": {
+                    "absMm": self.settings.accept_abs_mm,
+                    "rel": self.settings.accept_rel,
+                    "rule": "scarto per lato <= max(absMm, rel * lunghezza)",
+                },
             }
             model.quality = quality
+            totals = self.plan_totals(model)
+            model.metadata["totals"] = totals
 
             self.storage.write_json_atomic(out / "processed-plan.json", model.model_dump(mode="json"))
             dxf_validation = export_dxf(model, out / "plan.dxf")
@@ -191,6 +227,7 @@ class Pipeline:
                 "inputHash": input_hash,
                 "quality": quality,
                 "summary": summary,
+                "totals": totals,
                 "dxfValidation": dxf_validation,
                 "files": sorted(p.name for p in out.iterdir() if p.is_file() and p.name != "manifest.json"),
                 "glb": None,
@@ -254,6 +291,47 @@ class Pipeline:
             )
             raise
 
+    def _survey_kwargs(self) -> dict:
+        return {
+            "accept_abs_mm": self.settings.accept_abs_mm,
+            "accept_rel": self.settings.accept_rel,
+            "sigma_mm": self.settings.measure_sigma_mm,
+            "diagonal_snap_deg": self.settings.diagonal_snap_deg,
+        }
+
+    @staticmethod
+    def plan_totals(model) -> dict:
+        rooms = model.rooms
+
+        def total(attr):
+            return round(sum(float(getattr(r, attr) or 0) for r in rooms), 4)
+
+        questions = []
+        for r in rooms:
+            questions += [f"{r.name}: {q}" for q in r.questions]
+        questions += list((model.metadata.get("ai") or {}).get("questions") or [])
+        return {
+            "rooms": len(rooms),
+            "floorAreaM2": total("floorAreaM2"),
+            "grossFloorAreaM2": total("grossFloorAreaM2"),
+            "ceilingAreaM2": total("ceilingAreaM2"),
+            "grossWallAreaM2": total("grossWallAreaM2"),
+            "netWallAreaM2": total("netWallAreaM2"),
+            "openingsAreaM2": total("openingsAreaM2"),
+            "revealsAreaM2": total("revealsAreaM2"),
+            "tilingAreaM2": total("tilingAreaM2"),
+            "paintAreaM2": total("paintAreaM2"),
+            "skirtingM": total("skirtingM"),
+            "volumeM3": total("volumeM3"),
+            "doors": sum(1 for o in model.openings if o.type == "door"),
+            "windows": sum(1 for o in model.openings if o.type == "window"),
+            "estimatedWalls": sorted(w.id for w in model.walls if w.lengthSource == "SKETCH"),
+            "calculatedWalls": sorted(w.id for w in model.walls if w.lengthSource == "CALCULATED"),
+            "suspectWalls": sorted(w.id for w in model.walls if w.suspect),
+            "questions": list(dict.fromkeys(questions)),
+            "aiSummary": (model.metadata.get("ai") or {}).get("summary"),
+        }
+
     @staticmethod
     def process_response(plan_id, model, version, status, agent_log) -> dict:
         total = round(sum(r.floorAreaM2 for r in model.rooms), 6)
@@ -265,6 +343,7 @@ class Pipeline:
             "needsReview": model.needsReview,
             "quality": model.quality,
             "summary": {"rooms": len(model.rooms), "floorAreaM2": total},
+            "totals": model.metadata.get("totals"),
             "aiAvailable": agent_log.get("aiAvailable", False),
             "geometry": {
                 "walls": [w.model_dump(mode="json") for w in model.walls],
