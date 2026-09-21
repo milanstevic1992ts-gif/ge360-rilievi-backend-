@@ -15,6 +15,7 @@ from shapely.ops import polygonize, unary_union
 
 from backend.geometry.normalizer import NormalizedPlan
 from backend.geometry.solver import SolverResult
+from backend.geometry.text_it import it
 from backend.models import OpeningModel, PointMM, QualityStatus, RoomModel, RoomOpening, RoomWallFace
 
 ROOM_TYPES = [
@@ -283,37 +284,46 @@ def detect_rooms(plan: NormalizedPlan, solved: SolverResult, openings: list[Open
         calculated = [w for w in room_wall_ids if _src(w) == "CALCULATED"]
         errs = [solved.wall_meta[w].get("lengthErrorMm", 0.0) for w in room_wall_ids if w in solved.wall_meta and wall_by_id[w].measured]
         out = [w for w in room_wall_ids if w in solved.wall_meta and not solved.wall_meta[w].get("withinTolerance", True)]
-        questions = []
-        for w in room_wall_ids:
-            if w in suspects:
-                s = suspects[w]
-                questions.append(
-                    f"Parete {w}: misurata {s['declaredLengthMm'] / 10:.1f} cm, dal resto del rilievo risulta "
-                    f"{s['suggestedLengthMm'] / 10:.1f} cm. Puoi ricontrollarla?"
-                )
-        if out and not any(w in suspects for w in out):
-            questions.append(f"Le misure delle pareti {', '.join(out)} non chiudono: serve una diagonale o un ricontrollo.")
+        # --- registro delle decisioni per questa stanza (nessuna domanda all'utente) ---
+        decisions_txt: list[str] = []
+        probs: list[float] = []
+        room_set = set(room_wall_ids)
+        for d in solved.decisions:
+            touched = ({d["wallId"]} if d.get("wallId") else set()) | set(d.get("wallIds", []))
+            if touched & room_set:
+                pr = d.get("probability")
+                decisions_txt.append(d["text"] + (f" — probabilità {round(pr * 100)}%" if pr is not None else ""))
+                if pr is not None:
+                    probs.append(pr)
+        for w in calculated:
+            calc_mm = solved.wall_meta[w].get("calculatedLengthMm", 0.0)
+            decisions_txt.append(f"Parete {w} non misurata: calcolata {calc_mm / 10:.1f} cm dalle altre misure")
         for w in estimated:
             calc_mm = solved.wall_meta[w].get("calculatedLengthMm", wall_by_id[w].length_mm)
-            questions.append(f"Parete {w}: non misurata e non ricavabile dalle altre misure, stimata {calc_mm / 10:.0f} cm dallo schizzo. Serve la misura.")
+            decisions_txt.append(f"Parete {w} non misurata e non ricavabile: stimata {calc_mm / 10:.0f} cm dallo schizzo")
         loose = sorted({w for w in room_wall_ids if w in undetermined_by_wall})
         for w in loose:
-            host = undetermined_by_wall[w][0]["hostWallId"]
-            questions.append(f"Posizione del tramezzo {w} lungo la parete {host} presa dallo schizzo: misura la distanza da un angolo.")
+            t0 = undetermined_by_wall[w][0]
+            decisions_txt.append(
+                f"Posizione del tramezzo {w} lungo la parete {t0['hostWallId']} stimata dallo schizzo "
+                f"({t0['offsetFromHostStartMm'] / 10:.0f} cm dall'angolo)")
         free_walls = [w for w in room_wall_ids if w in solved.sketch_shape_walls]
         if free_walls:
-            questions.append(f"Pareti oblique {', '.join(free_walls)}: la forma non è ricavabile dalle misure, aggiungi una diagonale.")
+            decisions_txt.append(f"Forma delle pareti oblique {', '.join(free_walls)} stimata dallo schizzo")
 
         confidence = 1.0
+        for pr in probs:
+            confidence *= max(0.05, pr)
         confidence -= 0.25 * (len(estimated) / max(1, len(room_wall_ids)))
-        confidence -= 0.3 if out else 0.0
         confidence -= 0.1 if loose else 0.0
         confidence -= 0.1 if free_walls else 0.0
+        confidence -= 0.3 if (out and not all(w in {d.get("wallId") for d in solved.decisions} for w in out)) else 0.0
         confidence = round(max(0.05, min(1.0, confidence)), 2)
+        unresolved = [w for w in out if not solved.wall_meta.get(w, {}).get("resolvedBy")]
 
-        if out:
+        if unresolved:
             quality = QualityStatus.NEEDS_REVIEW
-        elif estimated or loose or free_walls:
+        elif estimated or loose or free_walls or probs:
             quality = QualityStatus.ESTIMATED
         else:
             quality = QualityStatus.OK
@@ -332,7 +342,7 @@ def detect_rooms(plan: NormalizedPlan, solved: SolverResult, openings: list[Open
             tilingHeightMm=tiling_h, tilingAreaM2=round(tiling_area, 4) if tiling_area is not None else None,
             paintAreaM2=round(paint, 4), wallFaces=faces, openings=room_openings,
             estimatedWallIds=estimated, calculatedWallIds=calculated, maxWallErrorMm=round(max(errs, default=0.0), 1),
-            confidence=confidence, questions=questions,
+            confidence=confidence, questions=[], decisions=[it(t) for t in decisions_txt],
         ))
 
     # adiacenze e collegamenti tramite porte

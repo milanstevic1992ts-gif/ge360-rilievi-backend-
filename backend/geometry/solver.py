@@ -28,12 +28,13 @@ import numpy as np
 from scipy.optimize import least_squares
 
 from backend.geometry.normalizer import NormalizedPlan, NormalizedWall
+from backend.geometry.text_it import it
 from backend.geometry.topology import TopologyResult
 
-SIGMA_PERP_MM = 3.0          # quanto "tiene" un angolo raddrizzato
+ANGLE_SIGMA_DEG = 0.8
+DETERMINED_STD_MM = 30.0       # oltre questa incertezza un valore non è "ricavato dalle misure"          # stanze reali: fuori squadra tipico di qualche decimo di grado
 SIGMA_PERP_RELAXED_MM = 40.0  # angoli nelle stanze triangolate da una diagonale
 SIGMA_TEE_MM = 1.0
-ROBUST_SCALE = 3.0
 
 
 @dataclass
@@ -48,6 +49,10 @@ class SolverResult:
     suspects: list[dict[str, Any]] = field(default_factory=list)
     diagonal_meta: list[dict[str, Any]] = field(default_factory=list)
     base_angle_deg: float = 0.0
+    # registro delle decisioni autonome (niente domande all'utente)
+    decisions: list[dict[str, Any]] = field(default_factory=list)
+    # configurazione della soluzione scelta, per rieseguirla nel Monte Carlo
+    solve_config: dict[str, Any] = field(default_factory=dict)
     # innesti a T la cui posizione lungo la parete ospite non è fissata da nessuna misura
     undetermined_tees: list[dict[str, Any]] = field(default_factory=list)
     # pareti oblique la cui direzione dipende ancora dallo schizzo (serve una diagonale)
@@ -192,8 +197,13 @@ def _initial_positions(plan: NormalizedPlan, targets: dict[str, float], node_ids
     return np.array([pos[n] for n in node_ids], dtype=float)
 
 
+def perp_sigma_mm(length_mm: float, angle_sigma_deg: float) -> float:
+    return max(2.0, length_mm * math.sin(math.radians(angle_sigma_deg)))
+
+
 def _solve_once(plan, targets, kinds, *, sigma_mm, free_length_ids=frozenset(), relaxed=frozenset(),
-                drop_len_ids=frozenset(), drop_dir_ids=frozenset()):
+                drop_len_ids=frozenset(), drop_dir_ids=frozenset(), length_overrides=None,
+                angle_sigma_deg=ANGLE_SIGMA_DEG):
     """drop_len_ids / drop_dir_ids: pareti la cui lunghezza / direzione è già ricavabile dalle misure,
     quindi il valore dello schizzo non viene più usato nemmeno come suggerimento."""
     node_ids = list(plan.nodes)
@@ -208,16 +218,19 @@ def _solve_once(plan, targets, kinds, *, sigma_mm, free_length_ids=frozenset(), 
     tees = [t for t in plan.tees if t["wallId"] in wall_by_id and t["node"] in index]
 
     wall_rows = []
+    overrides = length_overrides or {}
     for w in plan.walls:
         measured = w.measured and w.id not in free_length_ids
-        sig_len = sigma_mm if measured else max(50.0, 0.15 * w.length_mm)
+        length = overrides.get(w.id, w.length_mm)
+        sig_len = sigma_mm if measured else max(50.0, 0.15 * length)
         kind = kinds[w.id]
         th = targets[w.id]
         if kind == "free":
-            sig_dir = max(80.0, 0.25 * w.length_mm)
+            sig_dir = max(80.0, 0.25 * length)
         else:
-            sig_dir = SIGMA_PERP_RELAXED_MM if w.id in relaxed else SIGMA_PERP_MM
-        wall_rows.append((index[w.start_node], index[w.end_node], w.length_mm, sig_len, kind, math.cos(th), math.sin(th), sig_dir,
+            sig_dir = max(SIGMA_PERP_RELAXED_MM, perp_sigma_mm(length, angle_sigma_deg)) if w.id in relaxed \
+                else perp_sigma_mm(length, angle_sigma_deg)
+        wall_rows.append((index[w.start_node], index[w.end_node], length, sig_len, kind, math.cos(th), math.sin(th), sig_dir,
                           w.id in drop_len_ids and not measured, w.id in drop_dir_ids and kind == "free"))
 
     def residuals(flat):
@@ -250,7 +263,8 @@ def _solve_once(plan, targets, kinds, *, sigma_mm, free_length_ids=frozenset(), 
             res += [(pts[i, 0] - ax) / 0.5, (pts[i, 1] - ay) / 0.5]
         return np.asarray(res)
 
-    opt = least_squares(residuals, initial.reshape(-1), method="trf", loss="soft_l1", f_scale=ROBUST_SCALE,
+    # minimi quadrati puri: gli errori grossi non si "assorbono", li spiega il motore delle ipotesi
+    opt = least_squares(residuals, initial.reshape(-1), method="trf", loss="linear",
                         max_nfev=4000, xtol=1e-10, ftol=1e-10, gtol=1e-10)
     solved = opt.x.reshape((-1, 2))
     positions = {nid: (float(solved[index[nid], 0]), float(solved[index[nid], 1])) for nid in node_ids}
@@ -262,7 +276,7 @@ def _solve_once(plan, targets, kinds, *, sigma_mm, free_length_ids=frozenset(), 
         den = hx * hx + hy * hy or 1.0
         k = ((p[0] - a[0]) * hx + (p[1] - a[1]) * hy) / den
         positions[t["node"]] = (a[0] + k * hx, a[1] + k * hy)
-    opt.ge360_layout = {"index": index, "n_wall_rows": 3 * len(plan.walls), "tees": tees}
+    opt.ge360_layout = {"index": index, "n_wall_rows": 3 * len(plan.walls), "tees": tees, "residuals": residuals}
     return positions, opt
 
 
@@ -278,7 +292,17 @@ def _sketch_dependency(plan, positions, opt, kinds) -> dict:
     layout = getattr(opt, "ge360_layout", None)
     if not layout or opt.jac is None:
         return empty
-    jac = np.asarray(opt.jac.todense() if hasattr(opt.jac, "todense") else opt.jac, dtype=float)
+    # Jacobiano a differenze centrali (errore ~1e-8): quello di least_squares è in avanti
+    # (errore ~1e-4) e confonderebbe i modi davvero liberi con quelli debolmente vincolati.
+    x0 = np.asarray(opt.x, dtype=float)
+    fun = layout["residuals"]
+    h = 1e-3
+    cols = []
+    for k in range(len(x0)):
+        dx = np.zeros_like(x0)
+        dx[k] = h
+        cols.append((fun(x0 + dx) - fun(x0 - dx)) / (2 * h))
+    jac = np.column_stack(cols) if cols else np.zeros((0, 0))
     index = layout["index"]
     n = jac.shape[1]
     drop = set()
@@ -288,12 +312,15 @@ def _sketch_dependency(plan, positions, opt, kinds) -> dict:
         if kinds[w.id] == "free":
             drop.update({3 * k + 1, 3 * k + 2})
     drop.update(layout["n_wall_rows"] + 2 * k + 1 for k in range(len(layout["tees"])))
-    rows = [jac[r] for r in range(jac.shape[0]) if r not in drop]
+    # per stabilire COSA è ricavabile dalle misure gli angoli contano "come da progetto"
+    # (irrigiditi): l'incertezza del fuori squadra la misura poi il Monte Carlo
+    angle_rows = {3 * k + 1 for k, w in enumerate(plan.walls) if kinds[w.id] != "free"}
+    rows = [jac[r] * (25.0 if r in angle_rows else 1.0) for r in range(jac.shape[0]) if r not in drop]
 
     def angle_row(w):
         a, b = positions[w.start_node], positions[w.end_node]
         L = math.dist(a, b) or 1.0
-        px, py = -(b[1] - a[1]) / L / L, (b[0] - a[0]) / L / L
+        px, py = -(b[1] - a[1]) / L, (b[0] - a[0]) / L  # spostamento perpendicolare in mm
         row = np.zeros(n)
         i, j = index[w.start_node], index[w.end_node]
         row[2 * j], row[2 * j + 1] = px, py
@@ -315,16 +342,18 @@ def _sketch_dependency(plan, positions, opt, kinds) -> dict:
     if ref is not None:
         rows.append(angle_row(ref) * float(np.max(np.abs(jac))))
     j = np.vstack(rows) if rows else np.zeros((0, n))
-    _, sv, vt = np.linalg.svd(j, full_matrices=True)
-    smax = sv[0] if len(sv) else 1.0
-    rank = int(np.sum(sv > smax * 1e-4))  # sotto 1e-4: rumore del jacobiano numerico
-    null = vt[rank:]
+    # Covarianza a posteriori delle coordinate usando SOLO le misure (righe già divise per sigma):
+    # una grandezza è "determinata" se la sua deviazione standard è piccola, non se è
+    # matematicamente vincolata da effetti di secondo ordine.
+    info = j.T @ j
+    eps = 1e-9 * (np.trace(info) / max(1, n))
+    cov = np.linalg.pinv(info + eps * np.eye(n))
 
     def free_along(row) -> bool:
-        if null.shape[0] == 0:
-            return False
-        scale = float(np.linalg.norm(row)) or 1.0
-        return float(np.linalg.norm(null @ (row / scale))) > 0.05
+        norm = float(np.linalg.norm(row)) or 1.0
+        u = row / norm
+        std_mm = math.sqrt(max(0.0, float(u @ cov @ u))) * norm
+        return std_mm > DETERMINED_STD_MM
 
     out = {"unmeasured": {}, "freeWalls": {}, "tees": []}
     for w in plan.walls:
@@ -373,6 +402,8 @@ def solve_geometry(
     sigma_mm: float = 5.0,
     diagonal_snap_deg: float = 12.0,
     analyse_outliers: bool = True,
+    angle_sigma_deg: float = ANGLE_SIGMA_DEG,
+    priors: dict[str, float] | None = None,
 ) -> SolverResult:
     base, targets, kinds, rectilinear = _classify_angles(plan, orthogonal_tolerance_deg, diagonal_snap_deg)
     wall_meta: dict[str, dict[str, Any]] = {}
@@ -407,6 +438,15 @@ def solve_geometry(
     diag_nodes = {d["nodeA"] for d in plan.diagonals} | {d["nodeB"] for d in plan.diagonals}
     relaxed = frozenset(w.id for w in plan.walls if {w.start_node, w.end_node} & diag_nodes)
 
+    shape_decisions: list[dict[str, Any]] = []
+    if rectilinear and analyse_outliers and not angle_overrides:
+        from backend.geometry.hypotheses import classify_wall_shapes
+        targets, kinds, shape_decisions = classify_wall_shapes(
+            plan, targets, kinds, base, sigma_mm=sigma_mm, relaxed=relaxed, angle_sigma_deg=angle_sigma_deg)
+        for wid, kind in kinds.items():
+            wall_meta[wid]["orientation"] = kind
+            wall_meta[wid]["targetAngleDeg"] = math.degrees(targets[wid])
+
     graph = topology.graph.copy()
     wall_by_id = {w.id: w for w in plan.walls}
     for _, _, _, data in graph.edges(keys=True, data=True):
@@ -419,14 +459,15 @@ def solve_geometry(
     except Exception:
         closure = 0.0
 
-    positions, opt = _solve_once(plan, targets, kinds, sigma_mm=sigma_mm, relaxed=relaxed)
+    positions, opt = _solve_once(plan, targets, kinds, sigma_mm=sigma_mm, relaxed=relaxed, angle_sigma_deg=angle_sigma_deg)
     dep = _sketch_dependency(plan, positions, opt, kinds)
     calc_len = frozenset(w for w, ok in dep["unmeasured"].items() if ok)
     calc_dir = frozenset(w for w, ok in dep["freeWalls"].items() if ok)
     drops = {"drop_len_ids": calc_len, "drop_dir_ids": calc_dir}
     if calc_len or calc_dir:
         # ricalcolo puro dalle misure: lo schizzo non influenza più ciò che è ricavabile
-        positions, opt = _solve_once(plan, targets, kinds, sigma_mm=sigma_mm, relaxed=relaxed, **drops)
+        positions, opt = _solve_once(plan, targets, kinds, sigma_mm=sigma_mm, relaxed=relaxed,
+                                     angle_sigma_deg=angle_sigma_deg, **drops)
     errors = _errors(plan, positions, accept_abs_mm, accept_rel)
     out_of_tol = [wid for wid, (_, err, tol, measured) in errors.items() if measured and err > tol]
     diag_bad = []
@@ -447,39 +488,51 @@ def solve_geometry(
 
     diag_rows, diag_bad = diag_check(positions)
 
-    # --- ricerca della misura sbagliata (leave-one-out) ---------------------------------
-    if analyse_outliers and (out_of_tol or diag_bad):
-        measured_ids = [w.id for w in plan.walls if w.measured]
-        ranked = sorted(measured_ids, key=lambda wid: errors[wid][1] / errors[wid][2], reverse=True)[:10]
-        candidates = []
-        for wid in ranked:
-            pos2, opt2 = _solve_once(plan, targets, kinds, sigma_mm=sigma_mm, free_length_ids=frozenset({wid}), relaxed=relaxed, **drops)
-            err2 = _errors(plan, pos2, accept_abs_mm, accept_rel, free_length_ids=frozenset({wid}))
-            _, dbad2 = diag_check(pos2)
-            if not dbad2 and all(e <= tol for w2, (_, e, tol, m) in err2.items() if m):
-                candidates.append((wid, pos2, opt2, err2[wid][0]))
-        for wid, _, _, suggested in candidates:
-            suspects.append({"wallId": wid, "declaredLengthMm": wall_by_id[wid].length_mm,
-                             "suggestedLengthMm": round(suggested, 1)})
-        if len(candidates) == 1:
-            wid, positions, opt, suggested = candidates[0]
-            errors = _errors(plan, positions, accept_abs_mm, accept_rel)
-            diag_rows, diag_bad = diag_check(positions)
-            operations.append({"type": "suspect_measure", "wallId": wid,
-                               "declaredLengthMm": wall_by_id[wid].length_mm, "suggestedLengthMm": round(suggested, 1)})
-            warnings.append(
-                f"Misura sospetta: parete {wid} dichiarata {wall_by_id[wid].length_mm / 10:.1f} cm, "
-                f"il resto del rilievo indica {suggested / 10:.1f} cm"
-            )
-        elif len(candidates) > 1:
-            names = ", ".join(c[0] for c in candidates)
-            warnings.append(f"Misure incoerenti: una tra {names} è probabilmente sbagliata")
-        else:
-            warnings.append("Misure incoerenti: l'errore non è attribuibile a una sola misura")
+    # --- motore delle ipotesi: spiega le incoerenze e decide in autonomia -------------------
+    from backend.geometry.hypotheses import resolve_inconsistencies
+
+    decisions: list[dict[str, Any]] = []
+    for i, d in enumerate(shape_decisions, start=1):
+        decisions.append({"id": f"s{i}", **d})
+    config = {"targets": dict(targets), "kinds": dict(kinds), "free_length_ids": frozenset(),
+              "length_overrides": {}, "relaxed": relaxed, "ignored_diagonals": frozenset(),
+              "alternatives": [], **drops}
+    max_angle_dev = max((math.degrees(_angle_distance(
+        _angle(positions[w.end_node][0] - positions[w.start_node][0], positions[w.end_node][1] - positions[w.start_node][1]),
+        targets[w.id])) for w in plan.walls if kinds[w.id] != "free" and w.start_node != w.end_node), default=0.0)
+    if analyse_outliers and (out_of_tol or diag_bad or max_angle_dev > 2.0 * angle_sigma_deg):
+        outcome = resolve_inconsistencies(
+            plan, targets, kinds, sigma_mm=sigma_mm, relaxed=relaxed, drops=drops,
+            accept_abs_mm=accept_abs_mm, accept_rel=accept_rel, angle_sigma_deg=angle_sigma_deg,
+            priors=priors,
+        )
+        positions, opt = outcome["positions"], outcome["opt"]
+        config.update(outcome["config"])
+        config["alternatives"] = [(prob, {**alt_cfg, "relaxed": relaxed}) for prob, alt_cfg in outcome["alternatives"]]
+        targets, kinds = config["targets"], config["kinds"]
+        for wid, kind in kinds.items():
+            wall_meta[wid]["orientation"] = kind
+        decisions += outcome["decisions"]
+        for d in outcome["decisions"]:
+            if d["kind"] in {"typo", "outlier"}:
+                suspects.append({"wallId": d["wallId"], "declaredLengthMm": d["declaredMm"],
+                                 "suggestedLengthMm": round(d["usedMm"], 1), "probability": d["probability"]})
+                operations.append({"type": "suspect_measure", **{k: d[k] for k in ("wallId", "declaredMm", "usedMm", "probability")}})
+        errors = _errors(plan, positions, accept_abs_mm, accept_rel)
+        diag_rows, diag_bad = diag_check(positions)
         if closure > 2.0:
-            warnings.append(f"Authoritative lengths conflict with inferred angle constraints; closure mismatch {closure:.1f} mm")
+            warnings.append(f"Misure non chiuse ({closure:.1f} mm): risolto in autonomia, vedi decisioni")
 
     suspect_ids = {s["wallId"] for s in suspects}
+    # Only a concrete, satisfied replacement explains a length residual.
+    resolved = {}
+    for d in decisions:
+        wid = d.get("wallId")
+        if d["kind"] not in {"typo", "outlier"} or wid not in errors:
+            continue
+        used = config["length_overrides"].get(wid, errors[wid][0])
+        if abs(errors[wid][0] - used) <= acceptance_mm(used, accept_abs_mm, accept_rel):
+            resolved[wid] = d["id"]
     sketch_shape_walls = sorted(w for w, ok in dep["freeWalls"].items() if not ok)
     max_err = 0.0
     needs_review = False
@@ -490,7 +543,8 @@ def solve_geometry(
         within = (err <= tol) if measured else True
         if measured:
             max_err = max(max_err, err)
-            needs_review = needs_review or not within
+            # fuori tolleranza ma spiegato da una decisione: non serve revisione
+            needs_review = needs_review or (not within and w.id not in resolved)
         angle_err = math.degrees(_angle_distance(theta, targets[w.id]))
         wall_meta[w.id].update(
             calculatedLengthMm=calc, lengthErrorMm=err, solvedAngleDeg=math.degrees(theta), angleErrorDeg=angle_err,
@@ -499,6 +553,8 @@ def solve_geometry(
             lengthSource=("SUSPECT_MEASURED" if w.id in suspect_ids else "MEASURED")
             if w.measured else ("CALCULATED" if w.id in calc_len else "SKETCH"),
             shapeFromSketch=w.id in sketch_shape_walls,
+            resolvedBy=resolved.get(w.id),
+            usedLengthMm=config["length_overrides"].get(w.id, calc if w.id in config["free_length_ids"] else None),
         )
         if not w.measured:
             if w.id in calc_len:
@@ -507,14 +563,28 @@ def solve_geometry(
                 warnings.append(
                     f"Parete {w.id} non misurata e non ricavabile dalle misure: stimata {calc / 10:.0f} cm dallo schizzo"
                 )
-        if kinds[w.id] != "free" and angle_err > 2.0:
-            warnings.append(f"Parete {w.id}: angolo non retto ({angle_err:.1f}° dal previsto), mantenuto dalle misure")
+        if kinds[w.id] != "free" and angle_err > 2.0 and w.id not in resolved:
+            warnings.append(f"Parete {w.id}: fuori squadra di {angle_err:.1f}°, come indicato dalle misure")
+    tilted = []
+    for w in plan.walls:
+        if kinds[w.id] == "free" or w.id in resolved or w.start_node == w.end_node:
+            continue
+        dev = wall_meta[w.id].get("angleErrorDeg", 0.0)
+        if dev > 1.0:
+            tilted.append((dev, w.id))
+    if tilted:
+        worst = max(tilted)[0]
+        decisions.append({
+            "id": f"d{len(decisions) + 1}", "kind": "slightly_out_of_square", "probability": None,
+            "wallIds": sorted(w for _, w in tilted), "deviationDeg": round(worst, 2),
+            "text": it(f"Pareti {', '.join(sorted(w for _, w in tilted))} fuori squadra fino a {worst:.1f}°, come indicano le misure"),
+        })
     undetermined = _sketch_dependency(plan, positions, opt, kinds)["tees"]
     for t in undetermined:
         warnings.append(
             f"Posizione del tramezzo {', '.join(t['partitionWallIds'])} sulla parete {t['hostWallId']} stimata dallo schizzo"
         )
-    if diag_bad:
+    if any(d["id"] not in config["ignored_diagonals"] for d in diag_rows if not d["withinTolerance"]):
         needs_review = True
     if not opt.success:
         needs_review = True
@@ -528,4 +598,6 @@ def solve_geometry(
         suspects=suspects, diagonal_meta=diag_rows, base_angle_deg=math.degrees(base),
         undetermined_tees=undetermined,
         sketch_shape_walls=sketch_shape_walls,
+        decisions=decisions,
+        solve_config={**config, "sigma_mm": sigma_mm, "angle_sigma_deg": angle_sigma_deg},
     )

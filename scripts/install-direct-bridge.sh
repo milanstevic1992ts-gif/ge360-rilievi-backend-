@@ -157,7 +157,10 @@ mkdir -p "/etc/systemd/system/$SERVICE_NAME.d"
 cat > "/etc/systemd/system/$SERVICE_NAME.d/direct-bridge.conf" <<EOF
 [Unit]
 After=wg-quick@${WG_IFACE}.service ge360-direct-bridge-firewall.service
-Wants=wg-quick@${WG_IFACE}.service ge360-direct-bridge-firewall.service
+Wants=wg-quick@${WG_IFACE}.service
+# Il backend ascolta su 0.0.0.0: senza firewall attivo NON deve partire.
+Requires=ge360-direct-bridge-firewall.service
+BindsTo=ge360-direct-bridge-firewall.service
 
 [Service]
 EnvironmentFile=-$ENV_FILE

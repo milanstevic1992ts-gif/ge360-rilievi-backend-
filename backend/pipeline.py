@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import time
 import traceback
 import uuid
@@ -84,7 +85,8 @@ class Pipeline:
                 auto_close_mm=self.settings.auto_close_mm,
             )
             topology = build_topology(normalized)
-            survey_kwargs = self._survey_kwargs()
+            error_model = self._error_model()
+            survey_kwargs = self._survey_kwargs(error_model)
             solved = solve_geometry(
                 normalized,
                 topology,
@@ -173,7 +175,8 @@ class Pipeline:
                         }
                     )
 
-            model = build_cad_model(normalized, solved, bath_tiling_height_mm=tiling_h)
+            mc = self.settings.mc_samples
+            model = build_cad_model(normalized, solved, bath_tiling_height_mm=tiling_h, uncertainty_samples=mc)
             interpretation = None
             if self.settings.ai_enabled:
                 from backend.agent import OllamaClient
@@ -185,7 +188,8 @@ class Pipeline:
                 )
                 if interpretation["roomHints"]:
                     model = build_cad_model(
-                        normalized, solved, bath_tiling_height_mm=tiling_h, room_hints=interpretation["roomHints"]
+                        normalized, solved, bath_tiling_height_mm=tiling_h, room_hints=interpretation["roomHints"],
+                        uncertainty_samples=mc,
                     )
                 model.metadata["ai"] = {
                     "available": interpretation["available"],
@@ -261,6 +265,16 @@ class Pipeline:
                 "agent": agent_log,
             }
             self.storage.write_json_atomic(out / "manifest.json", manifest)
+            if error_model is not None:
+                try:
+                    learned = error_model.observe_and_save(
+                        normalized, solved, self._previous_decisions(plan_id),
+                        self.settings.accept_abs_mm, input_hash)
+                    self.storage.append_log(plan_id, {"event": "error_model_updated", **learned,
+                                                      "model": error_model.summary()})
+                except OSError as exc:
+                    # Optional learning must not discard successfully generated exports.
+                    self.storage.append_log(plan_id, {"event": "error_model_unavailable", "error": str(exc)})
             self.storage.publish_current(plan_id, out)
             self.db.set_status(
                 plan_id,
@@ -320,13 +334,30 @@ class Pipeline:
             )
             raise
 
-    def _survey_kwargs(self) -> dict:
-        return {
+    def _error_model(self):
+        if not self.settings.learn_errors:
+            return None
+        from backend.geometry.error_model import ErrorModel
+        return ErrorModel(self.settings.data_dir / "error-model.json")
+
+    def _survey_kwargs(self, error_model=None) -> dict:
+        out = {
             "accept_abs_mm": self.settings.accept_abs_mm,
             "accept_rel": self.settings.accept_rel,
             "sigma_mm": self.settings.measure_sigma_mm,
             "diagonal_snap_deg": self.settings.diagonal_snap_deg,
         }
+        if error_model is not None:
+            out.update(sigma_mm=error_model.sigma_mm(), angle_sigma_deg=error_model.angle_sigma_deg(),
+                       priors=error_model.priors())
+        return out
+
+    def _previous_decisions(self, plan_id: str) -> list[dict]:
+        path = self.storage.plan_dir(plan_id) / "current" / "processed-plan.json"
+        try:
+            return (json.loads(path.read_text(encoding="utf-8")).get("metadata") or {}).get("decisions") or []
+        except (OSError, ValueError):
+            return []
 
     @staticmethod
     def plan_totals(model) -> dict:
@@ -335,10 +366,15 @@ class Pipeline:
         def total(attr):
             return round(sum(float(getattr(r, attr) or 0) for r in rooms), 4)
 
-        questions = []
+        decisions = []
+        for d in model.metadata.get("decisions") or []:
+            pr = d.get("probability")
+            decisions.append(d["text"] + (f" — probabilità {round(pr * 100)}%" if pr is not None else ""))
         for r in rooms:
-            questions += [f"{r.name}: {q}" for q in r.questions]
-        questions += list((model.metadata.get("ai") or {}).get("questions") or [])
+            decisions += [f"{r.name}: {t}" for t in r.decisions if not any(t.startswith(x.split(' — ')[0]) for x in decisions)]
+        unc = (model.metadata.get("uncertainty") or {}).get("total")
+        area_total = sum(r.floorAreaM2 * 1.0 for r in rooms)
+        confidence = (sum(r.confidence * r.floorAreaM2 for r in rooms) / area_total) if area_total > 0 else None
         return {
             "rooms": len(rooms),
             "floorAreaM2": total("floorAreaM2"),
@@ -357,7 +393,10 @@ class Pipeline:
             "estimatedWalls": sorted(w.id for w in model.walls if w.lengthSource == "SKETCH"),
             "calculatedWalls": sorted(w.id for w in model.walls if w.lengthSource == "CALCULATED"),
             "suspectWalls": sorted(w.id for w in model.walls if w.suspect),
-            "questions": list(dict.fromkeys(questions)),
+            "questions": [],
+            "decisions": list(dict.fromkeys(decisions)),
+            "floorAreaRangeM2": [unc["p10"], unc["p90"]] if unc else None,
+            "confidence": round(confidence, 2) if confidence is not None else None,
             "aiSummary": (model.metadata.get("ai") or {}).get("summary"),
         }
 

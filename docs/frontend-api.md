@@ -146,3 +146,42 @@ L'IA non riceve né modifica coordinate o misure. Propone nome e tipo per le sta
 (i nomi dati dall'utente non vengono mai sovrascritti), riformula le incoerenze in domande e scrive
 un riassunto (`totals.aiSummary`, `processed.metadata.ai`). Se Ollama è spento il risultato è identico
 ma senza questi extra.
+
+## Agente autonomo (v1.5)
+
+Il backend non fa più domande. Quando le misure non chiudono mette in gara le spiegazioni
+possibili e adotta la più probabile (massimo a posteriori):
+
+| Ipotesi | Esempio |
+|---|---|
+| `typo` | cifre invertite (350 → 305), ±10 cm, ±1 m, cm/mm scambiati |
+| `outlier` | misura sbagliata di un valore qualsiasi: si usa quello ricavato dalle altre |
+| `out_of_square` | parete fuori squadra di qualche grado |
+| `wall_shape` | parete disegnata storta: a squadra, a 45° o obliqua, decidono le misure |
+| `diagonal_outlier` | quota di controllo incompatibile |
+| `compromise` | piccoli errori distribuiti |
+| `slightly_out_of_square` | informativa: stanza fuori squadra < 2° |
+
+Regole che non cambiano mai: `declaredLengthMm` resta quello digitato; il valore effettivamente
+usato è in `usedLengthMm` / `decisions[].usedMm`; ogni lunghezza ha `lengthSource`.
+
+### Nuovi campi
+
+- `processed.metadata.decisions[]`: `id, kind, text, probability (0-1 o null), wallId/wallIds,
+  declaredMm, usedMm, alternatives[{label, probability}]`
+- `rooms[].decisions[]`: testi delle decisioni che riguardano la stanza
+- `rooms[].floorAreaRangeM2`: `[p10, p90]` dal Monte Carlo (`GE360_MC_SAMPLES`, default 40, massimo 200)
+- `rooms[].confidence`: 0-1 (probabilità delle decisioni × ampiezza dell'intervallo)
+- `totals.decisions[]`, `totals.floorAreaRangeM2`, `totals.confidence`
+- `totals.questions` resta per compatibilità ed è sempre vuoto
+- `walls[].resolvedBy`, `walls[].usedLengthMm`
+
+### Modello degli errori (`data/error-model.json`)
+
+Impara la precisione delle misure e del fuori squadra dai rilievi coerenti e la frequenza dei
+tipi di errore **solo** dalle correzioni dell'utente (una misura ridigitata con il valore usato
+dall'agente è una conferma). Parametri sempre limitati; disattivabile con `GE360_LEARN_ERRORS=false`.
+
+Le probabilità sono pesi relativi delle ipotesi valutate, non probabilità calibrate di correttezza.
+Gli intervalli p10–p90 dipendono dal modello di rumore e dalle alternative considerate.
+Le incoerenze ancora fuori tolleranza restano `NEEDS_REVIEW`, anche in presenza di una decisione `compromise`.

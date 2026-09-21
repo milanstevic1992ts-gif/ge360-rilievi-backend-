@@ -28,6 +28,8 @@ class WallModel(BaseModel):
     # MEASURED = misura coerente; SUSPECT_MEASURED = misura originale conservata ma
     # esclusa dalla geometria adottata; CALCULATED = ricavata; SKETCH = solo schizzo.
     lengthSource: str = "MEASURED"
+    resolvedBy: str | None = None
+    usedLengthMm: float | None = None
 
     @property
     def lengthMm(self) -> float:

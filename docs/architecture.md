@@ -22,7 +22,7 @@ GE360 OPEN PLAN3D
 2. Topology and endpoint proximity come second.
 3. Orthogonal/parallel interpretation is used only when the sketch supports it.
 4. A real diagonal remains diagonal.
-5. A cycle whose measured lengths conflict with inferred angle constraints is `NEEDS_REVIEW`.
+5. Autonomous hypotheses can adopt explicit, traceable replacements for suspect measurements. Unresolved residuals remain `NEEDS_REVIEW`; a compromise or shape decision alone cannot clear them.
 6. The solver and AI agent never edit authoritative source wall lengths or opening measurements to force closure.
 
 ## Internal unit

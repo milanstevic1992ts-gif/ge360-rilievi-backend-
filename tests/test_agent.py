@@ -55,8 +55,10 @@ def test_ollama_offline_does_not_break_deterministic_pipeline(tmp_path: Path):
         wall("w3", (200,300), (0,300), 200), wall("w4", (0,300), (0,0), 280),
     ]})
     pipe.save_raw(p); result = pipe.process("offline")
-    assert result["status"] == "NEEDS_REVIEW" and result["aiAvailable"] is False
+    # l'agente risolve da solo l'incoerenza (280 vs 300) anche con Ollama spento
+    assert result["status"] == "PROCESSED" and result["aiAvailable"] is False
     current = storage.plan_dir("offline")/"current"
     assert (current/"plan.dxf").exists() and (current/"plan3d.json").exists()
     manifest = json.loads((current/"manifest.json").read_text())
-    assert manifest["agent"]["offline"] is True and manifest["agent"]["aiAvailable"] is False
+    assert manifest["agent"]["interpreter"]["available"] is False
+    assert result["totals"]["decisions"]

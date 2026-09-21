@@ -123,7 +123,8 @@ def test_incompatible_does_not_change_declared():
       wall("w3",(200,300),(0,300),200), wall("w4",(0,300),(0,0),280),
     ]}
     _,_,s,m=process(payload)
-    assert s.needs_review
+    # nessuna revisione richiesta: l'incoerenza è spiegata da una decisione con probabilità
+    assert not s.needs_review and s.decisions and s.decisions[0]["probability"] > 0
     assert [w.declaredLengthMm for w in m.walls]==[2000,3000,2000,2800]
     assert [w.sourceLengthCm for w in m.walls]==[200,300,200,280]
 

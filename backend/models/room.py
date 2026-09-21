@@ -65,4 +65,10 @@ class RoomModel(BaseModel):
     calculatedWallIds: list[str] = Field(default_factory=list)  # non misurate ma ricavate dalle misure
     maxWallErrorMm: float = 0.0
     confidence: float = 1.0
+    # compatibilità: l'agente non fa più domande, la lista resta vuota
     questions: list[str] = Field(default_factory=list)
+    # decisioni autonome che riguardano questa stanza (cosa ha deciso e perché)
+    decisions: list[str] = Field(default_factory=list)
+    # intervallo 10°-90° percentile del pavimento dal Monte Carlo
+    floorAreaRangeM2: list[float] | None = None
+    floorAreaStdM2: float | None = None

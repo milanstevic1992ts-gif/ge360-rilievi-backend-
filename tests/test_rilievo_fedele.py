@@ -99,12 +99,14 @@ def test_misura_sbagliata_viene_individuata():
     _, _, s, m, _ = solve_payload(payload(walls))
     assert [x["wallId"] for x in s.suspects] == ["s1"]
     assert s.suspects[0]["suggestedLengthMm"] == pytest.approx(3000, abs=10)
-    assert s.needs_review
+    assert s.suspects[0]["probability"] > 0.8
+    assert not s.needs_review  # deciso in autonomia
     s1 = next(w for w in m.walls if w.id == "s1")
-    assert s1.declaredLengthMm == 3300 and s1.suspect
+    assert s1.declaredLengthMm == 3300 and s1.suspect  # la misura dichiarata resta scritta
     # la geometria adottata è quella coerente con il resto del rilievo
     assert all(abs(r.floorAreaM2 - 9.0) < 0.02 for r in m.rooms)
-    assert any("s1" in q for r in m.rooms for q in r.questions)
+    assert any("s1" in t for r in m.rooms for t in r.decisions)
+    assert all(r.questions == [] for r in m.rooms)
 
 
 def test_diagonale_fissa_una_stanza_fuori_squadra():
@@ -112,7 +114,9 @@ def test_diagonale_fissa_una_stanza_fuori_squadra():
     walls = [W("w1", (0, 0), (400, 0), 400), W("w2", (400, 0), (400, 300), 300.17),
              W("w3", (400, 300), (0, 300), 410), W("w4", (0, 300), (0, 0), 300)]
     no_diag = solve_payload(payload(walls))
-    assert no_diag[2].needs_review
+    # anche senza diagonale le misure indicano una stanza fuori squadra: nessuna revisione
+    assert not no_diag[2].needs_review
+    assert no_diag[3].rooms[0].floorAreaM2 == pytest.approx(12.15, abs=0.05)
     diag = [{"id": "d1", "a": {"x": 0, "y": 0}, "b": {"x": 400, "y": 300}, "lengthCm": 508.04}]
     _, _, s, m, v = solve_payload(payload(walls, diagonals=diag))
     assert not s.needs_review, s.warnings
@@ -170,7 +174,7 @@ def test_posizione_tramezzo_non_misurata_genera_domanda():
     _, _, s, m, _ = solve_payload(payload(walls))
     assert {t["hostWallId"] for t in s.undetermined_tees} == {"top", "bottom"}
     assert all(r.quality.value == "ESTIMATED" for r in m.rooms)
-    assert all(any("mid" in q for q in r.questions) for r in m.rooms)
+    assert all(any("mid" in t for t in r.decisions) for r in m.rooms)
 
 
 def test_posizione_tramezzo_misurata_e_determinata():
@@ -216,7 +220,7 @@ def test_lati_mancanti_non_ricavabili_vengono_segnalati():
     assert src["w3"] == "SKETCH" and src["w5"] == "SKETCH"
     r = m.rooms[0]
     assert r.quality.value == "ESTIMATED" and sorted(r.estimatedWallIds) == ["w3", "w5"]
-    assert any("Serve la misura" in q for q in r.questions)
+    assert any("non ricavabile" in t and "w3" in t for t in r.decisions)
     # la somma è comunque rispettata dalle misure: w3 + w5 = 400
     lengths = {w.id: w.calculatedLengthMm for w in m.walls}
     assert lengths["w3"] + lengths["w5"] == pytest.approx(4000, abs=1)

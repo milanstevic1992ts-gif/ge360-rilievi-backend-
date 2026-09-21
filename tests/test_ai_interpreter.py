@@ -49,7 +49,7 @@ def test_ia_nomina_la_stanza_e_il_computo_si_aggiorna(tmp_path, monkeypatch):
     assert room["floorAreaM2"] == 5.0  # la geometria non cambia
     totals = result["totals"]
     assert totals["aiSummary"].startswith("Bagno")
-    assert "La finestra è sopra la vasca?" in totals["questions"]
+    assert totals["questions"] == []  # nessuna domanda all'utente, nemmeno dall'IA
 
 
 def test_nome_dato_dall_utente_non_viene_sovrascritto(tmp_path, monkeypatch):

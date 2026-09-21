@@ -23,8 +23,8 @@ Compiti:
 1. Per ogni stanza con nome generico ("Ambiente N") proponi un nome e un tipo plausibili
    usando note, dimensioni, aperture e adiacenze. Tipi ammessi: {", ".join(sorted(ALLOWED_TYPES))}.
    Se non sei ragionevolmente sicuro usa tipo "altro" e lascia il nome generico.
-2. Riformula avvisi e incoerenze in domande brevi e pratiche per chi ha misurato (massimo 6).
-3. Scrivi un riassunto di 1-2 frasi del rilievo.
+2. Non fare domande: il rilievo è già stato risolto in autonomia dal motore statistico.
+3. Scrivi un riassunto di 1-2 frasi del rilievo, citando solo numeri presenti nei dati.
 Regole: non inventare misure, non cambiare numeri, non proporre geometria.
 Rispondi SOLO con JSON:
 {{"rooms":[{{"roomId":"...","name":"...","type":"..."}}],"questions":["..."],"summary":"..."}}

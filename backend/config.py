@@ -51,6 +51,8 @@ class Settings:
     diagonal_snap_deg: float = 12.0      # aggancio pareti a 45° (smussi)
     bath_tiling_height_mm: float = 2200.0
     require_api_key: bool = True
+    mc_samples: int = 40                 # simulazioni Monte Carlo per gli intervalli dei m²
+    learn_errors: bool = True            # il modello degli errori impara dai rilievi reali
 
 
 def get_settings() -> Settings:
@@ -82,4 +84,6 @@ def get_settings() -> Settings:
         diagonal_snap_deg=float(os.getenv("GE360_DIAGONAL_SNAP_DEG", "12")),
         bath_tiling_height_mm=float(os.getenv("GE360_BATH_TILING_HEIGHT_MM", "2200")),
         require_api_key=_bool("GE360_REQUIRE_API_KEY", True),
+        mc_samples=min(200, max(0, int(os.getenv("GE360_MC_SAMPLES", "40")))),
+        learn_errors=os.getenv("GE360_LEARN_ERRORS", "true").strip().lower() in {"1", "true", "yes", "on"},
     )

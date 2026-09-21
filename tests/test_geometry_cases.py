@@ -124,14 +124,13 @@ def test_case_j_incompatible_lengths_needs_review():
         {"id":"w4","a":{"x":0,"y":300},"b":{"x":0,"y":0},"lengthCm":290},
     ]
     _,_,solved,model,validation=solve_payload(make_payload(walls))
-    assert solved.needs_review
-    assert validation["needsReview"]
     assert solved.closure_error_mm > 50
     # le misure dichiarate non vengono mai toccate
     assert [w.declaredLengthMm for w in model.walls]==[2000,3000,2000,2900]
-    # 300 contro 290 su lati opposti: il solver non può sapere quale sia sbagliata -> le segnala entrambe
-    assert {s["wallId"] for s in solved.suspects}=={"w2","w4"}
-    assert len(model.rooms)==1
+    # 10 cm su 2 m: spiegato come stanza leggermente fuori squadra, senza revisione né domande
+    assert not solved.needs_review and not validation["needsReview"]
+    assert any(d["kind"] in {"slightly_out_of_square", "out_of_square", "typo"} for d in solved.decisions)
+    assert len(model.rooms)==1 and model.rooms[0].decisions
 
 
 def test_case_k_wildly_disproportionate_sketch_uses_measurements():
