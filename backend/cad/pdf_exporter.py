@@ -244,6 +244,60 @@ def export_pdf(model: PlanModel, path: Path) -> None:
     c.setFont("Helvetica", 5.8)
     c.drawString(margin, 25, "Documento generato dal backend GE360 Rilievi")
 
+    works = list(model.metadata.get("works") or [])
+    if works:
+        c.showPage()
+        c.setPageSize(page)
+        _draw_brand(c, pw, ph, margin, f"{model.name} · LAVORAZIONI RILEVATE")
+        y = ph - 96
+        c.setFillColorRGB(0.06, 0.09, 0.16)
+        c.setFont("Helvetica-Bold", 10)
+        c.drawString(margin, y, "LAVORAZIONI RILEVATE IN CANTIERE")
+        y -= 17
+        c.setFont("Helvetica", 6.2)
+        c.setFillColorRGB(0.35, 0.39, 0.47)
+        c.drawString(margin, y, "Le quantità sono ricavate dalla geometria GE360 quando disponibile; le voci manuali restano da verificare.")
+        y -= 20
+
+        grouped = {}
+        for row in works:
+            names = row.get("targetNames") or []
+            target = ", ".join(names) if names else ("TUTTA LA CASA" if row.get("targetType") == "plan" else "ALTRO")
+            grouped.setdefault(target, []).append(row)
+
+        for target, rows in grouped.items():
+            if y < 92:
+                c.showPage()
+                c.setPageSize(page)
+                _draw_brand(c, pw, ph, margin, f"{model.name} · LAVORAZIONI RILEVATE")
+                y = ph - 96
+            c.setFillColorRGB(0.06, 0.09, 0.16)
+            c.setFont("Helvetica-Bold", 8.3)
+            c.drawString(margin, y, target.upper()[:70])
+            y -= 13
+            for row in rows:
+                if y < 72:
+                    c.showPage()
+                    c.setPageSize(page)
+                    _draw_brand(c, pw, ph, margin, f"{model.name} · LAVORAZIONI RILEVATE")
+                    y = ph - 96
+                qty = row.get("quantity")
+                unit = row.get("unit") or ""
+                qty_text = "DA VERIFICARE" if qty is None else f"{qty:.2f} {unit}".replace(".", ",")
+                c.setFillColorRGB(0.10, 0.14, 0.20)
+                c.setFont("Helvetica", 7)
+                c.drawString(margin + 8, y, str(row.get("label") or "")[:72])
+                c.setFont("Helvetica-Bold", 7)
+                c.drawRightString(pw - margin, y, qty_text)
+                note = str(row.get("note") or "").strip()
+                if note:
+                    y -= 9
+                    c.setFillColorRGB(0.38, 0.42, 0.49)
+                    c.setFont("Helvetica-Oblique", 5.8)
+                    c.drawString(margin + 14, y, note[:105])
+                y -= 12
+            y -= 5
+
     append_usage_terms_page(
         c,
         document_name=model.name,

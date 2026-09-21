@@ -24,6 +24,7 @@ from backend.jobs import JobManager
 from backend.models import PlanPayload
 from backend.pipeline import Pipeline
 from backend.storage import PlanStorage
+from backend.works import load_catalog
 
 logger = logging.getLogger("ge360.rilievi")
 settings = get_settings()
@@ -226,6 +227,11 @@ def health():
         "apiKeyRequired": bool(read_runtime_api_key(settings)) or settings.require_api_key,
         "setupUrl": "/setup/",
     }
+
+
+@app.get("/api/v1/work-catalog", dependencies=[Depends(require_api_key)])
+def work_catalog():
+    return load_catalog()
 
 
 @app.get("/api/v1/setup/status", dependencies=[Depends(require_setup_access)])

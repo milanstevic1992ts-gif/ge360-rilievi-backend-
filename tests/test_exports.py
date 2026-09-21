@@ -16,8 +16,11 @@ def wall(id,a,b,length): return {"id":id,"a":{"x":a[0],"y":a[1]},"b":{"x":b[0],"
 def model():
     p=PlanPayload.model_validate({"planId":"exports","name":"Stanza 2x3","wallHeightM":2.7,"walls":[
       wall("w1",(0,0),(205,8),200),wall("w2",(205,8),(214,310),300),wall("w3",(214,310),(4,301),200),wall("w4",(4,301),(0,0),300),
-    ],"openings":[{"id":"d1","type":"door","wallId":"w2","widthCm":80,"offsetCm":60,"referenceEnd":"a"},{"id":"f1","type":"window","wallId":"w4","widthCm":100,"offsetCm":80,"referenceEnd":"a","heightCm":120,"sillHeightCm":90}]})
-    n=normalize_payload(p); t=build_topology(n); s=solve_geometry(n,t); return build_cad_model(n,s)
+    ],"works":[{"id":"wk1","catalogId":"paint.walls_ceiling","targetType":"plan"}],"openings":[{"id":"d1","type":"door","wallId":"w2","widthCm":80,"offsetCm":60,"referenceEnd":"a"},{"id":"f1","type":"window","wallId":"w4","widthCm":100,"offsetCm":80,"referenceEnd":"a","heightCm":120,"sillHeightCm":90}]})
+    n=normalize_payload(p); t=build_topology(n); s=solve_geometry(n,t); m=build_cad_model(n,s)
+    from backend.works import resolve_works
+    m.metadata["works"]=resolve_works(m,p.works)
+    return m
 
 
 def test_dxf_real_validation(tmp_path:Path):
@@ -50,6 +53,8 @@ def test_svg_png_pdf_and_plan3d(tmp_path:Path):
     assert b'Limitazione di responsabilit' in pdf_bytes
     assert b'Riservatezza e divieto di diffusione.' in pdf_bytes
     assert b'Validit' in pdf_bytes
+    assert b'LAVORAZIONI RILEVATE' in pdf_bytes
+    assert b'Pitturazione pareti + soffitto' in pdf_bytes
     data=json.loads(p3.read_text())
     assert data['units']=='mm'
     assert sorted(round(w['length']) for w in data['walls'])==[2000,2000,3000,3000]

@@ -53,6 +53,20 @@ class FrontendRoom(BaseModel):
     # campi opzionali accettati come extra (non alterano il RAW): type, heightCm, tilingHeightCm
 
 
+class FrontendWork(BaseModel):
+    model_config = ConfigDict(extra="allow")
+    id: str
+    catalogId: str
+    label: str | None = None
+    targetType: Literal["room", "plan", "wall", "opening"] = "room"
+    targetId: str | None = None
+    targetIds: list[str] = Field(default_factory=list)
+    quantityRule: str | None = None
+    manualQuantity: float | None = None
+    unit: str | None = None
+    note: str | None = None
+
+
 class FrontendDiagonal(BaseModel):
     """Misura di controllo tra due angoli (diagonale o qualsiasi distanza punto-punto)."""
 
@@ -76,6 +90,7 @@ class PlanPayload(BaseModel):
     rooms: list[FrontendRoom] = Field(default_factory=list, max_length=200)
     diagonals: list[FrontendDiagonal] = Field(default_factory=list, max_length=500)
     notes: list[Any] = Field(default_factory=list)
+    works: list[FrontendWork] = Field(default_factory=list, max_length=1000)
     wallHeightM: float = 2.70
     # interior        = ogni linea è il filo interno misurato (default, compatibile V1)
     # partitionAxis   = perimetro a filo interno, tramezzi disegnati in asse (si scala mezzo spessore per lato)
@@ -90,6 +105,7 @@ class PlanPayload(BaseModel):
             "wall": [row.id for row in self.walls],
             "opening": [row.id for row in self.openings],
             "diagonal": [row.id for row in self.diagonals],
+            "work": [row.id for row in self.works],
             "room": [row.id for row in self.rooms if row.id],
         }
         for label, ids in groups.items():

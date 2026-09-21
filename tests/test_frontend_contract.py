@@ -33,6 +33,10 @@ def test_real_openplan3d_v4_payload_roundtrip(tmp_path: Path, monkeypatch):
     client = TestClient(main.app)
     headers = {"X-GE360-API-Key": "frontend-contract-key"}
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
+    payload["works"] = [
+        {"id":"work-paint","catalogId":"paint.walls_ceiling","targetType":"plan"},
+        {"id":"work-floor","catalogId":"tiles.install.floor","targetType":"room","targetId":"room-living"},
+    ]
 
     queued = client.post("/api/v1/plans/refine", json=payload, headers=headers)
     assert queued.status_code == 200
@@ -78,4 +82,15 @@ def test_real_openplan3d_v4_payload_roundtrip(tmp_path: Path, monkeypatch):
     assert original["rawStrokes"] == payload["rawStrokes"]
     assert original["rooms"] == payload["rooms"]
     assert original["notes"] == payload["notes"]
+    assert original["works"] == payload["works"]
     assert original["surfaces"] == payload["surfaces"]
+
+    works = processed["metadata"]["works"]
+    assert len(works) == 2
+    assert works[0]["quantitySource"] == "authoritative-plan-geometry"
+    assert works[0]["quantity"] > 6.0
+    assert works[1]["quantity"] == 6.0
+
+    catalog = client.get("/api/v1/work-catalog", headers=headers)
+    assert catalog.status_code == 200
+    assert any(row["id"] == "paint.walls" for row in catalog.json()["works"])
