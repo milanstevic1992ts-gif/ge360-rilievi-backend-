@@ -1,5 +1,5 @@
 {
-  "version": "2026.09.21.1",
+  "version": "2026.09.22.2",
   "works": [
     {
       "id": "paint.walls",
@@ -90,7 +90,7 @@
       "id": "tiles.remove.wall",
       "label": "Rimozione piastrelle pareti",
       "category": "Demolizioni",
-      "quantityRule": "ROOM_NET_WALLS",
+      "quantityRule": "ROOM_TILING_OR_NET_WALLS",
       "unit": "m²",
       "basePriority": 150,
       "synonyms": [
@@ -115,7 +115,7 @@
       "id": "tiles.install.wall",
       "label": "Posa piastrelle pareti",
       "category": "Rivestimenti",
-      "quantityRule": "ROOM_NET_WALLS",
+      "quantityRule": "ROOM_TILING_OR_NET_WALLS",
       "unit": "m²",
       "basePriority": 150,
       "synonyms": [
@@ -248,7 +248,7 @@
       "id": "wall.demolish",
       "label": "Demolizione parete",
       "category": "Demolizioni",
-      "quantityRule": "MANUAL",
+      "quantityRule": "WALL_GROSS_AREA",
       "unit": "m²",
       "basePriority": 140,
       "synonyms": [
@@ -261,7 +261,7 @@
       "id": "wall.partition",
       "label": "Nuova parete in laterizio",
       "category": "Muratura",
-      "quantityRule": "MANUAL",
+      "quantityRule": "WALL_GROSS_AREA",
       "unit": "m²",
       "basePriority": 110,
       "synonyms": [
@@ -273,7 +273,7 @@
       "id": "wall.restore",
       "label": "Ripristino muratura",
       "category": "Muratura",
-      "quantityRule": "MANUAL",
+      "quantityRule": "WALL_GROSS_AREA",
       "unit": "m²",
       "basePriority": 100,
       "synonyms": [
@@ -333,7 +333,7 @@
       "id": "drywall.wall",
       "label": "Controparete cartongesso",
       "category": "Cartongesso",
-      "quantityRule": "MANUAL",
+      "quantityRule": "WALL_GROSS_AREA",
       "unit": "m²",
       "basePriority": 110,
       "synonyms": [
@@ -345,7 +345,7 @@
       "id": "drywall.partition",
       "label": "Parete divisoria cartongesso",
       "category": "Cartongesso",
-      "quantityRule": "MANUAL",
+      "quantityRule": "WALL_GROSS_AREA",
       "unit": "m²",
       "basePriority": 105,
       "synonyms": [
