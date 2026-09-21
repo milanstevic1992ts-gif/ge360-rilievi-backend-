@@ -55,9 +55,9 @@ chmod 0755 "$APP_DIR/scripts/preflight.sh" "$APP_DIR/scripts/install-direct-brid
 mkdir -p "$PKG_ROOT/usr/bin"
 install -m 0755 "$ROOT/scripts/ge360-rilievi-status" "$PKG_ROOT/usr/bin/ge360-rilievi-status"
 install -m 0755 "$ROOT/scripts/ge360-rilievi-diagnose" "$PKG_ROOT/usr/bin/ge360-rilievi-diagnose"
-install -d "$PKG/usr/share/applications" "$PKG/usr/share/icons/hicolor/scalable/apps"
-install -m 0644 "$ROOT_DIR/packaging/desktop/ge360-rilievi-backend.desktop" "$PKG/usr/share/applications/ge360-rilievi-backend.desktop"
-install -m 0644 "$ROOT_DIR/packaging/desktop/ge360-rilievi.svg" "$PKG/usr/share/icons/hicolor/scalable/apps/ge360-rilievi.svg"
+install -d "$PKG_ROOT/usr/share/applications" "$PKG_ROOT/usr/share/icons/hicolor/scalable/apps"
+install -m 0644 "$ROOT/packaging/desktop/ge360-rilievi-backend.desktop" "$PKG_ROOT/usr/share/applications/ge360-rilievi-backend.desktop"
+install -m 0644 "$ROOT/packaging/desktop/ge360-rilievi.svg" "$PKG_ROOT/usr/share/icons/hicolor/scalable/apps/ge360-rilievi.svg"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<EOF
 Package: $PACKAGE
