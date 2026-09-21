@@ -92,13 +92,32 @@ def room_area_uncertainty(plan, solved: SolverResult, base_rooms, *, samples: in
             continue
         ok += 1
         totals.append(sum(r.floorAreaM2 for r in rooms))
-        # Stable wall boundaries avoid mixing neighbouring rooms when centroids move.
+        # Prefer identical wall boundaries. During perturbations a T-junction can
+        # temporarily make one boundary wall disappear from polygonize; in that case
+        # use a conservative one-to-one Jaccard fallback instead of dropping the room.
         matched = set()
         for r in rooms:
-            candidates = [base for base in base_rooms
-                          if set(base.wallIds) == set(r.wallIds) and base.roomId not in matched]
-            if len(candidates) == 1:
-                rid = candidates[0].roomId
+            sample_ids = set(r.wallIds)
+            exact = [
+                base for base in base_rooms
+                if set(base.wallIds) == sample_ids and base.roomId not in matched
+            ]
+            candidate = exact[0] if len(exact) == 1 else None
+            if candidate is None:
+                scored = []
+                for base in base_rooms:
+                    if base.roomId in matched:
+                        continue
+                    base_ids = set(base.wallIds)
+                    union = base_ids | sample_ids
+                    score = len(base_ids & sample_ids) / len(union) if union else 0.0
+                    if score >= 0.60:
+                        scored.append((score, base))
+                scored.sort(key=lambda item: (-item[0], item[1].roomId))
+                if scored and (len(scored) == 1 or scored[0][0] > scored[1][0]):
+                    candidate = scored[0][1]
+            if candidate is not None:
+                rid = candidate.roomId
                 matched.add(rid)
                 areas[rid].append(r.floorAreaM2)
 
