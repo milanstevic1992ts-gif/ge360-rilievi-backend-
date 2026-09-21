@@ -143,11 +143,21 @@ def test_fastapi_polling_versions_files_security_and_cors(tmp_path: Path, monkey
     assert client.get("/api/v1/health").status_code == 401
     viewer = client.get("/viewer3d/")
     assert viewer.status_code == 200 and "GE360 3D Viewer" in viewer.text
+    control = client.get("/control/")
+    assert control.status_code == 200 and "GE360 Control Center" in control.text
     assert client.post("/api/v1/plans", json=payload("api1"), headers=h).json()["status"] == "RAW"
     queued = client.post("/api/v1/plans/api1/process", headers=h).json()
     assert queued["status"] == "QUEUED" and wait_job(client, queued["jobId"], h)["status"] == "DONE"
     status = client.get("/api/v1/plans/api1", headers=h).json()
     assert status["status"] == "PROCESSED" and status["currentVersion"] == 1
+    control_summary = client.get("/api/v1/control/summary", headers=h).json()
+    assert control_summary["counts"]["plans"] == 1
+    assert control_summary["recent"][0]["planId"] == "api1"
+    control_plans = client.get("/api/v1/control/plans", headers=h).json()
+    assert control_plans["plans"][0]["currentVersion"] == 1
+    control_jobs = client.get("/api/v1/control/jobs", headers=h).json()
+    assert control_jobs["jobs"]
+
     assert status["summary"] == {"rooms": 1, "floorAreaM2": 6.0} and status["files"]["glb"] is None
     for route in ("processed", "preview", "png", "svg", "pdf", "dxf", "3d"):
         assert client.get(f"/api/v1/plans/api1/{route}", headers=h).status_code == 200

@@ -150,6 +150,37 @@ class Database:
         out["quality"] = json.loads(q) if q else None
         return out
 
+    def list_plans(self, limit: int = 200) -> list[dict]:
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT * FROM plans ORDER BY updated_at DESC LIMIT ?",
+                (max(1, min(int(limit), 1000)),),
+            ).fetchall()
+        out = []
+        for row in rows:
+            item = dict(row)
+            item["needsReview"] = bool(item.pop("needs_review"))
+            q = item.pop("quality_json")
+            item["quality"] = json.loads(q) if q else None
+            out.append(item)
+        return out
+
+    def list_jobs(self, limit: int = 100) -> list[dict]:
+        with self.connect() as con:
+            rows = con.execute(
+                "SELECT * FROM jobs ORDER BY created_at DESC LIMIT ?",
+                (max(1, min(int(limit), 1000)),),
+            ).fetchall()
+        return [self._job_row(row) for row in rows]
+
+    def media_count(self, plan_id: str) -> int:
+        with self.connect() as con:
+            row = con.execute(
+                "SELECT COUNT(*) AS n FROM plan_media WHERE plan_id=?",
+                (plan_id,),
+            ).fetchone()
+        return int(row["n"] if row else 0)
+
     # ---------------- persistent jobs ----------------
 
     def create_or_get_active_job(self, plan_id: str) -> tuple[dict, bool]:

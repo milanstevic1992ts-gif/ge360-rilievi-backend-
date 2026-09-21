@@ -1,0 +1,125 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1120">
+  <title>GE360 Control Center</title>
+  <link rel="stylesheet" href="/control/control.css">
+</head>
+<body>
+<div id="appShell" class="app-shell">
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">G</div>
+      <div><strong>GE360</strong><span>CONTROL CENTER</span></div>
+    </div>
+    <nav id="nav">
+      <button class="nav-item active" data-view="dashboard"><span>⌂</span>Dashboard</button>
+      <button class="nav-item" data-view="plans"><span>▱</span>Rilievi</button>
+      <button class="nav-item" data-view="jobs"><span>↻</span>Elaborazioni</button>
+      <button class="nav-item" data-view="catalog"><span>☷</span>Catalogo lavori</button>
+      <button class="nav-item" data-view="documents"><span>▤</span>Documenti</button>
+      <button class="nav-item" data-view="system"><span>◉</span>Sistema</button>
+    </nav>
+    <div class="sidebar-foot">
+      <div id="sideBackend" class="mini-status"><i></i><span>Backend</span><b>—</b></div>
+      <div id="sideAi" class="mini-status"><i></i><span>Qwen</span><b>—</b></div>
+      <button id="changeKeyBtn" class="ghost-btn">Chiave API</button>
+    </div>
+  </aside>
+
+  <main class="workspace">
+    <header class="topbar">
+      <div>
+        <div class="kicker">EDIL MILAN STEVIC · RILIEVI</div>
+        <h1 id="pageTitle">Dashboard</h1>
+      </div>
+      <div class="top-actions">
+        <label class="search-box"><span>⌕</span><input id="globalSearch" placeholder="Cerca rilievo, cliente, ID…"></label>
+        <button id="refreshBtn" class="icon-button" title="Aggiorna">↻</button>
+      </div>
+    </header>
+
+    <section id="view-dashboard" class="view active">
+      <div id="statsGrid" class="stats-grid"></div>
+      <div class="dashboard-grid">
+        <section class="panel panel-wide">
+          <div class="panel-head"><div><span class="eyebrow">LAVORO</span><h2>Rilievi recenti</h2></div><button data-go="plans" class="text-btn">VEDI TUTTI →</button></div>
+          <div id="recentPlans" class="recent-grid"></div>
+        </section>
+        <section class="panel">
+          <div class="panel-head"><div><span class="eyebrow">CODA</span><h2>Elaborazioni</h2></div></div>
+          <div id="jobMiniList" class="stack-list"></div>
+        </section>
+      </div>
+    </section>
+
+    <section id="view-plans" class="view">
+      <div class="panel">
+        <div class="panel-head"><div><span class="eyebrow">ARCHIVIO</span><h2>Tutti i rilievi</h2></div><span id="plansCount" class="counter">0</span></div>
+        <div id="plansTable" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section id="view-jobs" class="view">
+      <div class="panel">
+        <div class="panel-head"><div><span class="eyebrow">BACKEND</span><h2>Coda elaborazioni</h2></div></div>
+        <div id="jobsTable" class="table-wrap"></div>
+      </div>
+    </section>
+
+    <section id="view-catalog" class="view">
+      <div class="panel">
+        <div class="panel-head"><div><span class="eyebrow">LAVORAZIONI</span><h2>Catalogo GE360</h2></div><span id="catalogCount" class="counter">0</span></div>
+        <label class="catalog-search"><input id="catalogSearch" placeholder="Cerca: piastrelle, rasatura, porta…"></label>
+        <div id="catalogGrid" class="catalog-grid"></div>
+      </div>
+    </section>
+
+    <section id="view-documents" class="view">
+      <div class="panel">
+        <div class="panel-head"><div><span class="eyebrow">OUTPUT</span><h2>Documenti recenti</h2></div></div>
+        <div id="documentsGrid" class="documents-grid"></div>
+      </div>
+    </section>
+
+    <section id="view-system" class="view">
+      <div id="systemGrid" class="system-grid"></div>
+    </section>
+  </main>
+</div>
+
+<div id="authGate" class="auth-gate hidden">
+  <section class="auth-card">
+    <div class="auth-logo">GE360</div>
+    <h2>Control Center</h2>
+    <p>Inserisci la chiave API del backend. Rimane soltanto nella sessione di questo browser.</p>
+    <input id="apiKeyInput" type="password" autocomplete="off" placeholder="X-GE360-API-Key">
+    <button id="connectBtn">COLLEGA</button>
+    <div id="authError" class="auth-error"></div>
+  </section>
+</div>
+
+<div id="planDrawer" class="drawer-backdrop hidden">
+  <aside class="plan-drawer">
+    <header class="drawer-head">
+      <div><span class="eyebrow">RILIEVO</span><h2 id="drawerTitle">—</h2><div id="drawerMeta" class="drawer-meta"></div></div>
+      <button id="closeDrawerBtn" class="close-btn">×</button>
+    </header>
+    <div class="drawer-tabs" id="drawerTabs">
+      <button class="active" data-tab="overview">Panoramica</button>
+      <button data-tab="rooms">Ambienti</button>
+      <button data-tab="works">Lavori</button>
+      <button data-tab="photos">Foto</button>
+      <button data-tab="documents">Documenti</button>
+      <button data-tab="versions">Versioni</button>
+    </div>
+    <div id="drawerBody" class="drawer-body"></div>
+  </aside>
+</div>
+
+<div id="toast" class="toast hidden"></div>
+<script type="module" src="/control/control.js"></script>
+</body>
+</html>

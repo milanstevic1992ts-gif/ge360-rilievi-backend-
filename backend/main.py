@@ -3,9 +3,11 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import shutil
 import uuid
 from pathlib import Path
 
+import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
@@ -60,6 +62,10 @@ if viewer_dir.is_dir():
 setup_dir = Path(__file__).resolve().parents[1] / "setup"
 if setup_dir.is_dir():
     app.mount("/setup", StaticFiles(directory=setup_dir, html=True), name="setup")
+
+control_dir = Path(__file__).resolve().parents[1] / "control"
+if control_dir.is_dir():
+    app.mount("/control", StaticFiles(directory=control_dir, html=True), name="control")
 
 ARTIFACTS: dict[str, tuple[str, str, bool]] = {
     "processed": ("processed-plan.json", "application/json", False),
@@ -226,6 +232,115 @@ def health():
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(read_runtime_api_key(settings)) or settings.require_api_key,
         "setupUrl": "/setup/",
+    }
+
+
+@app.get("/api/v1/control/summary", dependencies=[Depends(require_api_key)])
+def control_summary():
+    plans = db.list_plans(500)
+    jobs_rows = db.list_jobs(500)
+    counts = {
+        "plans": len(plans),
+        "ready": sum(1 for row in plans if row["status"] == "PROCESSED"),
+        "review": sum(1 for row in plans if row["needsReview"] or row["status"] == "NEEDS_REVIEW"),
+        "processing": sum(1 for row in jobs_rows if row["status"] == "PROCESSING"),
+        "queued": sum(1 for row in jobs_rows if row["status"] == "QUEUED"),
+        "errors": sum(1 for row in jobs_rows if row["status"] == "ERROR"),
+    }
+    recent = []
+    for row in plans[:8]:
+        manifest = _manifest(storage.plan_dir(row["plan_id"]) / "current") or {}
+        recent.append(
+            {
+                "planId": row["plan_id"],
+                "name": row["name"],
+                "status": row["status"],
+                "currentVersion": row["current_version"],
+                "updatedAt": row["updated_at"],
+                "needsReview": row["needsReview"],
+                "summary": manifest.get("summary"),
+                "totals": manifest.get("totals"),
+                "photoCount": db.media_count(row["plan_id"]),
+                "preview": f"/api/v1/plans/{row['plan_id']}/preview"
+                if (storage.plan_dir(row["plan_id"]) / "current" / "preview.png").exists()
+                else None,
+            }
+        )
+    return {"counts": counts, "recent": recent}
+
+
+@app.get("/api/v1/control/plans", dependencies=[Depends(require_api_key)])
+def control_plans(limit: int = 200):
+    rows = []
+    for row in db.list_plans(limit):
+        manifest = _manifest(storage.plan_dir(row["plan_id"]) / "current") or {}
+        rows.append(
+            {
+                "planId": row["plan_id"],
+                "name": row["name"],
+                "status": row["status"],
+                "currentVersion": row["current_version"],
+                "createdAt": row["created_at"],
+                "updatedAt": row["updated_at"],
+                "needsReview": row["needsReview"],
+                "quality": row["quality"],
+                "lastError": row["last_error"],
+                "summary": manifest.get("summary"),
+                "totals": manifest.get("totals"),
+                "photoCount": db.media_count(row["plan_id"]),
+                "files": _current_file_links(row["plan_id"]) if row["current_version"] else {},
+            }
+        )
+    return {"plans": rows}
+
+
+@app.get("/api/v1/control/jobs", dependencies=[Depends(require_api_key)])
+def control_jobs(limit: int = 100):
+    return {"jobs": db.list_jobs(limit)}
+
+
+@app.get("/api/v1/control/status", dependencies=[Depends(require_api_key)])
+def control_status():
+    usage = shutil.disk_usage(settings.data_dir)
+    ai = {
+        "enabled": settings.ai_enabled,
+        "model": settings.ollama_model,
+        "url": settings.ollama_url,
+        "reachable": False,
+        "modelAvailable": False,
+    }
+    try:
+        response = httpx.get(settings.ollama_url + "/api/tags", timeout=1.5)
+        response.raise_for_status()
+        payload = response.json()
+        names = [str(row.get("name") or "") for row in payload.get("models", [])]
+        ai["reachable"] = True
+        ai["modelAvailable"] = any(
+            name == settings.ollama_model or name.split(":")[0] == settings.ollama_model.split(":")[0]
+            for name in names
+        )
+    except Exception:
+        pass
+
+    bridge = {"available": False}
+    try:
+        bridge_payload = get_bridge_manager().status()
+        bridge = {"available": True, **bridge_payload}
+    except Exception as exc:
+        bridge = {"available": False, "error": str(exc)}
+
+    return {
+        "backend": {"ok": True, "version": app.version, "host": settings.host, "port": settings.port},
+        "storage": {
+            "path": str(settings.data_dir),
+            "totalBytes": usage.total,
+            "usedBytes": usage.used,
+            "freeBytes": usage.free,
+        },
+        "ai": ai,
+        "bridge": bridge,
+        "apiKeyRequired": bool(read_runtime_api_key(settings)) or settings.require_api_key,
+        "jobWorkers": settings.job_workers,
     }
 
 
