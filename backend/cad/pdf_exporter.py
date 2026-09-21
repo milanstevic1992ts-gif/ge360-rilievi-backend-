@@ -37,7 +37,7 @@ BRAND_SITE_URL = os.getenv("GE360_BRAND_SITE_URL", "").strip()
 
 COVER_INTRO = (
     "Ogni progetto ben riuscito comincia prima dei lavori: dal primo sopralluogo, "
-    "dall'ascolto delle esigenze e da misure prese con cura. Questo rilievo e il "
+    "dall'ascolto delle esigenze e da misure prese con cura. Questo rilievo è il "
     "punto di partenza su cui costruiamo insieme scelte, soluzioni e tempi, "
     "accompagnandovi passo dopo passo fino alla realizzazione."
 )
@@ -46,7 +46,7 @@ COVER_VALUES = (
     (
         "Ascolto",
         "Il progetto parte da voi: da come vivete gli spazi, da cosa vorreste cambiare "
-        "e da cio che e importante conservare. Ogni misura raccolta serve a trasformare "
+        "e da ciò che è importante conservare. Ogni misura raccolta serve a trasformare "
         "queste esigenze in soluzioni concrete.",
     ),
     (
@@ -58,7 +58,7 @@ COVER_VALUES = (
     (
         "Accompagnamento",
         "Dal rilievo alla progettazione, fino alla scelta delle finiture, vi seguiamo "
-        "in ogni fase con un unico riferimento, cosi che ogni decisione sia chiara e condivisa.",
+        "in ogni fase con un unico riferimento, così che ogni decisione sia chiara e condivisa.",
     ),
 )
 
