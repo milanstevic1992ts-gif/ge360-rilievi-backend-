@@ -38,14 +38,6 @@ mkdir -p "$OUT_DIR" "$APP_DIR" "$PKG_ROOT/DEBIAN" "$PKG_ROOT/lib/systemd/system"
 
 rsync -a   --exclude '.git'   --exclude '.github'   --exclude '.venv'   --exclude '.env'   --exclude 'dist'   --exclude 'local-data'   --exclude '__pycache__'   --exclude '.pytest_cache'   --exclude 'tests'   "$ROOT/" "$APP_DIR/"
 
-# Materialize the bundled company logo inside the .deb.
-LOGO_B64="$APP_DIR/assets/branding/logo-edil-milan-stevic.jpg.b64"
-LOGO_JPG="$APP_DIR/assets/branding/logo-edil-milan-stevic.jpg"
-if [ -f "$LOGO_B64" ]; then
-  base64 -d "$LOGO_B64" > "$LOGO_JPG"
-  chmod 0644 "$LOGO_JPG"
-fi
-
 install -m 0644 "$ROOT/packaging/deb/ge360-rilievi-backend.service"   "$PKG_ROOT/lib/systemd/system/ge360-rilievi-backend.service"
 install -m 0755 "$ROOT/packaging/deb/preinst" "$PKG_ROOT/DEBIAN/preinst"
 install -m 0755 "$ROOT/packaging/deb/postinst" "$PKG_ROOT/DEBIAN/postinst"
@@ -55,9 +47,6 @@ chmod 0755 "$APP_DIR/scripts/preflight.sh" "$APP_DIR/scripts/install-direct-brid
 mkdir -p "$PKG_ROOT/usr/bin"
 install -m 0755 "$ROOT/scripts/ge360-rilievi-status" "$PKG_ROOT/usr/bin/ge360-rilievi-status"
 install -m 0755 "$ROOT/scripts/ge360-rilievi-diagnose" "$PKG_ROOT/usr/bin/ge360-rilievi-diagnose"
-install -d "$PKG_ROOT/usr/share/applications" "$PKG_ROOT/usr/share/icons/hicolor/scalable/apps"
-install -m 0644 "$ROOT/packaging/desktop/ge360-rilievi-backend.desktop" "$PKG_ROOT/usr/share/applications/ge360-rilievi-backend.desktop"
-install -m 0644 "$ROOT/packaging/desktop/ge360-rilievi.svg" "$PKG_ROOT/usr/share/icons/hicolor/scalable/apps/ge360-rilievi.svg"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<EOF
 Package: $PACKAGE
