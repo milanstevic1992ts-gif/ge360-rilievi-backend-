@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=GE360 Rilievi
+GenericName=GE360 Backend Rilievi
+Comment=Apri la dashboard GE360 Rilievi
+Exec=xdg-open http://127.0.0.1:9888/control/
+Icon=ge360-rilievi
+Terminal=false
+Categories=Office;Utility;
+StartupNotify=true
+Keywords=GE360;Rilievi;Edil;Planimetrie;
