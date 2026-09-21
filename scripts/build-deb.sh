@@ -39,10 +39,14 @@ mkdir -p "$OUT_DIR" "$APP_DIR" "$PKG_ROOT/DEBIAN" "$PKG_ROOT/lib/systemd/system"
 rsync -a   --exclude '.git'   --exclude '.github'   --exclude '.venv'   --exclude '.env'   --exclude 'dist'   --exclude 'local-data'   --exclude '__pycache__'   --exclude '.pytest_cache'   --exclude 'tests'   "$ROOT/" "$APP_DIR/"
 
 install -m 0644 "$ROOT/packaging/deb/ge360-rilievi-backend.service"   "$PKG_ROOT/lib/systemd/system/ge360-rilievi-backend.service"
+install -m 0755 "$ROOT/packaging/deb/preinst" "$PKG_ROOT/DEBIAN/preinst"
 install -m 0755 "$ROOT/packaging/deb/postinst" "$PKG_ROOT/DEBIAN/postinst"
 install -m 0755 "$ROOT/packaging/deb/prerm" "$PKG_ROOT/DEBIAN/prerm"
 install -m 0755 "$ROOT/packaging/deb/postrm" "$PKG_ROOT/DEBIAN/postrm"
-chmod 0755 "$APP_DIR/scripts/preflight.sh" "$APP_DIR/scripts/install-direct-bridge.sh"
+chmod 0755 "$APP_DIR/scripts/preflight.sh" "$APP_DIR/scripts/install-direct-bridge.sh" "$APP_DIR/scripts/ge360-rilievi-status" "$APP_DIR/scripts/ge360-rilievi-diagnose"
+mkdir -p "$PKG_ROOT/usr/bin"
+install -m 0755 "$ROOT/scripts/ge360-rilievi-status" "$PKG_ROOT/usr/bin/ge360-rilievi-status"
+install -m 0755 "$ROOT/scripts/ge360-rilievi-diagnose" "$PKG_ROOT/usr/bin/ge360-rilievi-diagnose"
 
 cat > "$PKG_ROOT/DEBIAN/control" <<EOF
 Package: $PACKAGE
