@@ -1,0 +1,18 @@
+// GE360 Universal Bridge Android SDK - dependency fragment
+// Verified current official WireGuard tunnel artifact on Maven Central: 1.0.20260102
+
+android {
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+        isCoreLibraryDesugaringEnabled = true
+    }
+}
+
+dependencies {
+    implementation("com.wireguard.android:tunnel:1.0.20260102")
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.3")
+
+    // Ge360BridgeClient uses coroutines. Reuse the version already pinned by your app.
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:<your-pinned-version>")
+}
