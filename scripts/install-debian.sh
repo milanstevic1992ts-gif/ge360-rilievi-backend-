@@ -44,28 +44,7 @@ fi
 chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR" || true
 
 KEY_FILE="$DATA_DIR/.api-key"
-if [[ ! -s "$KEY_FILE" ]] && ! grep -Eq '^GE360_API_KEY=.{16,}
-TARGET_SERVICE="/etc/systemd/system/$SERVICE_NAME"
-if [[ -e "$TARGET_SERVICE" ]]; then
-  echo "Existing $TARGET_SERVICE preserved. Review deploy/$SERVICE_NAME manually if an update is needed."
-else
-  cp "deploy/$SERVICE_NAME" "$TARGET_SERVICE"
-  systemctl daemon-reload
-  echo "Installed systemd unit: $TARGET_SERVICE"
-fi
-
-echo "Install complete. Review $APP_DIR/.env, then run:"
-echo "  sudo systemctl enable --now $SERVICE_NAME"
-echo "  sudo systemctl status $SERVICE_NAME"
-echo
-echo "For GE360 DIRECT BRIDGE (WireGuard):"
-echo "  sudo bash $APP_DIR/scripts/install-direct-bridge.sh"
-echo "Then open locally:"
-echo "  http://127.0.0.1:9888/setup/"
-echo
-echo "Legacy/optional Tailscale setup remains available:"
-echo "  sudo bash $APP_DIR/scripts/setup-tailscale.sh"
- .env; then
+if [[ ! -s "$KEY_FILE" ]] && ! grep -Eq '^GE360_API_KEY=.{16,}$' .env; then
   "$PYTHON_BIN" - <<PY
 from pathlib import Path
 import secrets, os
