@@ -48,6 +48,14 @@ mkdir -p "$PKG_ROOT/usr/bin"
 install -m 0755 "$ROOT/scripts/ge360-rilievi-status" "$PKG_ROOT/usr/bin/ge360-rilievi-status"
 install -m 0755 "$ROOT/scripts/ge360-rilievi-diagnose" "$PKG_ROOT/usr/bin/ge360-rilievi-diagnose"
 
+mkdir -p "$PKG_ROOT/usr/share/applications" "$PKG_ROOT/usr/share/icons/hicolor/scalable/apps"
+install -m 0644 "$ROOT/packaging/desktop/ge360-rilievi-backend.desktop" "$PKG_ROOT/usr/share/applications/ge360-rilievi-backend.desktop"
+install -m 0644 "$ROOT/packaging/desktop/ge360-rilievi.svg" "$PKG_ROOT/usr/share/icons/hicolor/scalable/apps/ge360-rilievi.svg"
+
+mkdir -p "$PKG_ROOT/usr/local/sbin"
+install -m 0755 "$ROOT/scripts/ge360-boot-verify.sh" "$PKG_ROOT/usr/local/sbin/ge360-boot-verify"
+install -m 0644 "$ROOT/packaging/deb/ge360-boot-verify.service" "$PKG_ROOT/lib/systemd/system/ge360-boot-verify.service"
+
 cat > "$PKG_ROOT/DEBIAN/control" <<EOF
 Package: $PACKAGE
 Version: $VERSION
