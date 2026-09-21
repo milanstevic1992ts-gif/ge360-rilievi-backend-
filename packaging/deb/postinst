@@ -102,6 +102,9 @@ find "$APP_DIR/.venv/bin" -type f -exec chmod g+rx {} + 2>/dev/null || true
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
+  if systemctl list-unit-files ollama.service >/dev/null 2>&1; then
+    systemctl enable ollama.service >/dev/null 2>&1 || true
+  fi
   if [ -f "$APP_DIR/packaging/deb/ge360-boot-verify.service" ] && [ -f "$APP_DIR/scripts/ge360-boot-verify.sh" ]; then
     install -m 0755 "$APP_DIR/scripts/ge360-boot-verify.sh" /usr/local/sbin/ge360-boot-verify || true
     install -m 0644 "$APP_DIR/packaging/deb/ge360-boot-verify.service" /etc/systemd/system/ge360-boot-verify.service || true
@@ -120,8 +123,15 @@ if command -v systemctl >/dev/null 2>&1; then
   fi
 fi
 
+if command -v update-desktop-database >/dev/null 2>&1; then
+  update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+  gtk-update-icon-cache -f -t /usr/share/icons/hicolor >/dev/null 2>&1 || true
+fi
+
 echo
-echo "GE360 Rilievi Backend 1.5.1 installed."
+echo "GE360 Rilievi Backend installed."
 echo "Control panel : http://127.0.0.1:9888/control/"
 echo "Setup         : http://127.0.0.1:9888/setup/"
 echo "Status        : ge360-rilievi-status"
