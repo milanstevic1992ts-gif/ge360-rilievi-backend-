@@ -99,9 +99,25 @@ def test_fastapi_polling_versions_files_security_and_cors(tmp_path: Path, monkey
     assert cors.headers["access-control-allow-origin"] == "https://app.ge360.test"
 
 
-def test_empty_api_key_is_development_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
-    monkeypatch.setenv("GE360_API_KEY", ""); monkeypatch.setenv("GE360_DATA_DIR", str(tmp_path/"dev")); monkeypatch.setenv("GE360_DB_PATH", str(tmp_path/"dev/db.sqlite3"))
+def test_empty_api_key_is_blocked_by_default(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("GE360_API_KEY", "")
+    monkeypatch.setenv("GE360_API_KEY_FILE", str(tmp_path/"missing.key"))
+    monkeypatch.setenv("GE360_REQUIRE_API_KEY", "true")
+    monkeypatch.setenv("GE360_DATA_DIR", str(tmp_path/"dev"))
+    monkeypatch.setenv("GE360_DB_PATH", str(tmp_path/"dev/db.sqlite3"))
     import backend.main as main
-    main = importlib.reload(main); client = TestClient(main.app)
+    with pytest.raises(RuntimeError, match="API key required"):
+        importlib.reload(main)
+
+
+def test_explicit_development_mode_can_disable_api_key(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
+    monkeypatch.setenv("GE360_API_KEY", "")
+    monkeypatch.setenv("GE360_API_KEY_FILE", str(tmp_path/"missing.key"))
+    monkeypatch.setenv("GE360_REQUIRE_API_KEY", "false")
+    monkeypatch.setenv("GE360_DATA_DIR", str(tmp_path/"dev2"))
+    monkeypatch.setenv("GE360_DB_PATH", str(tmp_path/"dev2/db.sqlite3"))
+    import backend.main as main
+    main = importlib.reload(main)
+    client = TestClient(main.app)
     assert client.get("/api/v1/health").json()["apiKeyRequired"] is False
     assert client.post("/api/v1/plans", json=payload(None)).json()["status"] == "RAW"

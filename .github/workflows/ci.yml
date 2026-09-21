@@ -19,3 +19,9 @@ jobs:
       - run: bash -n scripts/setup-tailscale.sh
       - run: bash -n scripts/install-direct-bridge.sh
       - run: bash -n scripts/direct-bridge-firewall.sh
+      - run: bash -n scripts/preflight.sh
+      - name: Firewall policy guard
+        run: |
+          grep -q 'iifname "lo" tcp dport' scripts/direct-bridge-firewall.sh
+          grep -q 'iifname "$WG_IFACE" tcp dport' scripts/direct-bridge-firewall.sh
+          ! grep -Eq '10\.0\.0\.0/8|172\.16\.0\.0/12|192\.168\.0\.0/16' scripts/direct-bridge-firewall.sh

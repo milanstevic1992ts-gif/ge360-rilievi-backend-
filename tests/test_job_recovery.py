@@ -19,7 +19,8 @@ def _settings(tmp_path: Path) -> Settings:
     return Settings(
         "", tmp_path / "data", tmp_path / "data/db.sqlite3", "127.0.0.1", 9888,
         120, 2700, 250, 25, .5, False,
-        "http://127.0.0.1:11434", "qwen2.5:7b", .1,
+        "http://127.0.0.1:11434", "qwen3:8b", .1,
+        require_api_key=False,
     )
 
 
@@ -36,33 +37,50 @@ def _payload():
     })
 
 
-def test_orphaned_processing_state_can_be_requeued_after_restart(tmp_path: Path):
+def _wait(jobs: JobManager, job_id: str):
+    for _ in range(300):
+        state = jobs.state(job_id)
+        if state and state["status"] in {"DONE", "ERROR"}:
+            return state
+        time.sleep(.02)
+    raise AssertionError("recovered job timeout")
+
+
+def test_processing_job_is_persisted_and_resumed_automatically(tmp_path: Path):
     settings = _settings(tmp_path)
     storage = PlanStorage(settings.data_dir)
     db = Database(settings.db_path)
     pipeline = Pipeline(settings, storage, db)
     pipeline.save_raw(_payload())
 
-    # Simulate a process dying after persisting PROCESSING but before a local
-    # Future can survive the restart.
+    job, created = db.create_or_get_active_job("restart-recovery")
+    assert created
+    db.set_job_status(job["jobId"], "PROCESSING")
     db.set_status("restart-recovery", PlanStatus.PROCESSING, error="")
-    jobs = JobManager(pipeline, max_workers=1)
 
-    queued = jobs.submit("restart-recovery")
-    assert queued["created"] is True
-    assert queued["status"] == "QUEUED"
-    assert queued["jobId"]
-
-    for _ in range(250):
-        state = jobs.state(queued["jobId"])
-        if state and state["status"] in {"DONE", "ERROR"}:
-            break
-        time.sleep(.02)
-    else:
-        raise AssertionError("recovered job timeout")
-
+    # A fresh JobManager represents the new process after a crash/restart.
+    jobs = JobManager(Pipeline(settings, PlanStorage(settings.data_dir), Database(settings.db_path)), max_workers=1)
+    state = _wait(jobs, job["jobId"])
     assert state["status"] == "DONE", state
+    assert state["attempts"] >= 2
     assert db.get("restart-recovery")["status"] == "PROCESSED"
     log = (storage.plan_dir("restart-recovery") / "logs/processing.jsonl").read_text(encoding="utf-8")
-    assert '"event":"orphaned_job_recovered"' in log
-    assert '"previousStatus":"PROCESSING"' in log
+    assert '"event":"persistent_job_recovered"' in log
+
+
+def test_job_state_survives_new_manager_instance(tmp_path: Path):
+    settings = _settings(tmp_path)
+    storage = PlanStorage(settings.data_dir)
+    db = Database(settings.db_path)
+    pipeline = Pipeline(settings, storage, db)
+    pipeline.save_raw(_payload())
+    jobs = JobManager(pipeline, max_workers=1)
+    queued = jobs.submit("restart-recovery")
+    state = _wait(jobs, queued["jobId"])
+    assert state["status"] == "DONE"
+    jobs.shutdown()
+
+    jobs2 = JobManager(Pipeline(settings, storage, Database(settings.db_path)), max_workers=1)
+    persisted = jobs2.state(queued["jobId"])
+    assert persisted and persisted["status"] == "DONE"
+    assert persisted["result"]["planId"] == "restart-recovery"

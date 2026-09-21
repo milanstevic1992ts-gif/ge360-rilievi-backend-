@@ -18,11 +18,6 @@ table inet ge360_direct_bridge {
     type filter hook input priority -20; policy accept;
     iifname "lo" tcp dport $BACKEND_PORT accept
     iifname "$WG_IFACE" tcp dport $BACKEND_PORT accept
-    ip saddr 10.0.0.0/8 tcp dport $BACKEND_PORT accept
-    ip saddr 172.16.0.0/12 tcp dport $BACKEND_PORT accept
-    ip saddr 192.168.0.0/16 tcp dport $BACKEND_PORT accept
-    ip6 saddr fc00::/7 tcp dport $BACKEND_PORT accept
-    ip6 saddr fe80::/10 tcp dport $BACKEND_PORT accept
     tcp dport $BACKEND_PORT drop
     udp dport $WG_PORT accept
   }

@@ -50,6 +50,7 @@ class Settings:
     auto_close_mm: float = 600.0         # chiusura automatica di varchi nello schizzo
     diagonal_snap_deg: float = 12.0      # aggancio pareti a 45° (smussi)
     bath_tiling_height_mm: float = 2200.0
+    require_api_key: bool = True
 
 
 def get_settings() -> Settings:
@@ -80,4 +81,5 @@ def get_settings() -> Settings:
         auto_close_mm=float(os.getenv("GE360_AUTO_CLOSE_MM", "600")),
         diagonal_snap_deg=float(os.getenv("GE360_DIAGONAL_SNAP_DEG", "12")),
         bath_tiling_height_mm=float(os.getenv("GE360_BATH_TILING_HEIGHT_MM", "2200")),
+        require_api_key=_bool("GE360_REQUIRE_API_KEY", True),
     )

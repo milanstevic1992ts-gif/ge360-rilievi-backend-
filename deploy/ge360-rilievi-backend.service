@@ -8,6 +8,7 @@ User=jarvis
 Group=jarvis
 WorkingDirectory=/opt/ge360/ge360-rilievi-backend
 EnvironmentFile=/opt/ge360/ge360-rilievi-backend/.env
+ExecStartPre=/opt/ge360/ge360-rilievi-backend/scripts/preflight.sh
 ExecStart=/opt/ge360/ge360-rilievi-backend/.venv/bin/uvicorn backend.main:app --host 127.0.0.1 --port 9888
 Restart=on-failure
 RestartSec=3

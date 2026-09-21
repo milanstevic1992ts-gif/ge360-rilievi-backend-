@@ -26,14 +26,19 @@ from backend.storage import PlanStorage
 
 logger = logging.getLogger("ge360.rilievi")
 settings = get_settings()
+_runtime_api_key = read_runtime_api_key(settings)
+if settings.require_api_key and not _runtime_api_key:
+    raise RuntimeError(
+        "GE360 SECURITY: API key required. Set GE360_API_KEY or GE360_API_KEY_FILE before starting."
+    )
 storage = PlanStorage(settings.data_dir)
 db = Database(settings.db_path)
 pipeline = Pipeline(settings, storage, db)
 jobs = JobManager(pipeline, max_workers=settings.job_workers)
 _bridge_manager: DirectBridgeManager | None = None
 
-if not read_runtime_api_key(settings):
-    logger.warning("GE360 API key is empty: local/development API is running without authentication")
+if not _runtime_api_key:
+    logger.warning("GE360 API key disabled explicitly for development")
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
@@ -68,6 +73,8 @@ ARTIFACTS: dict[str, tuple[str, str, bool]] = {
 def require_api_key(x_ge360_api_key: str | None = Header(default=None)) -> None:
     api_key = read_runtime_api_key(settings)
     if not api_key:
+        if settings.require_api_key:
+            raise HTTPException(status_code=503, detail="GE360 API key is not configured")
         return
     if x_ge360_api_key and secrets.compare_digest(x_ge360_api_key, api_key):
         return
@@ -215,7 +222,7 @@ def health():
         "service": "ge360-rilievi-backend",
         "version": "1.4.0",
         "aiEnabled": settings.ai_enabled,
-        "apiKeyRequired": bool(read_runtime_api_key(settings)),
+        "apiKeyRequired": settings.require_api_key,
         "setupUrl": "/setup/",
     }
 
