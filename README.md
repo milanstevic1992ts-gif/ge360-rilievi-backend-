@@ -72,6 +72,22 @@ openssl rand -hex 32
 
 ## GE360 UNIVERSAL DIRECT BRIDGE (WireGuard)
 
+### Installazione guidata consigliata
+
+La strada principale è ora il wizard:
+
+```bash
+sudo bash scripts/ge360-bridge-wizard.sh
+```
+
+Dopo la prima installazione compare anche **GE360 Universal Bridge** nel menu applicazioni: apre un terminale e avvia automaticamente il setup. Il wizard configura il core, rileva IPv6/IPv4 pubblico, tenta UPnP quando possibile, riconosce CGNAT, registra i backend, abilita la persistenza al reboot e può creare lo ZIP frontend per l'app.
+
+Per esportare il pacchetto frontend di un'app registrata:
+
+```bash
+sudo ge360-bridge-export-frontend APP_ID
+```
+
 Il collegamento remoto nativo è ora trattato come **infrastruttura GE360 condivisa**: un solo tunnel WireGuard persistente può servire Rilievi e altri backend GE360 senza creare una VPN diversa per ogni app.
 
 Architettura predefinita:
