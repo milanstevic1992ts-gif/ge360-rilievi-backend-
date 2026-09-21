@@ -130,10 +130,11 @@ install -m 0755 "$ROOT/scripts/register-bridge-app.sh" /usr/local/sbin/ge360-bri
 install -m 0755 "$ROOT/scripts/ge360-bridge-network-auto.sh" /usr/local/sbin/ge360-bridge-network-auto
 install -m 0755 "$ROOT/scripts/ge360-bridge-wizard.sh" /usr/local/sbin/ge360-bridge-wizard
 install -m 0755 "$ROOT/scripts/ge360-bridge-terminal-launcher.sh" /usr/local/bin/ge360-bridge-setup-terminal
+install -m 0755 "$ROOT/scripts/export-frontend-bridge-kit.sh" /usr/local/sbin/ge360-bridge-export-frontend
 
 # Keep a standalone reusable copy outside every application repository.
 if [[ "$(readlink -f "$ROOT")" != "$(readlink -m "$INSTALL_ROOT")" ]]; then
-  install -d -m 0755 "$INSTALL_ROOT/scripts" "$INSTALL_ROOT/config" "$INSTALL_ROOT/packaging/desktop"
+  install -d -m 0755 "$INSTALL_ROOT/scripts" "$INSTALL_ROOT/config" "$INSTALL_ROOT/packaging/desktop" "$INSTALL_ROOT/frontend" "$INSTALL_ROOT/docs"
   install -m 0755 "$ROOT/scripts/install-universal-bridge-core.sh" "$INSTALL_ROOT/scripts/install-universal-bridge-core.sh"
   install -m 0755 "$ROOT/scripts/register-bridge-app.sh" "$INSTALL_ROOT/scripts/register-bridge-app.sh"
   install -m 0755 "$ROOT/scripts/direct-bridge-firewall.sh" "$INSTALL_ROOT/scripts/direct-bridge-firewall.sh"
@@ -141,7 +142,12 @@ if [[ "$(readlink -f "$ROOT")" != "$(readlink -m "$INSTALL_ROOT")" ]]; then
   install -m 0755 "$ROOT/scripts/ge360-bridge-network-auto.sh" "$INSTALL_ROOT/scripts/ge360-bridge-network-auto.sh"
   install -m 0755 "$ROOT/scripts/ge360-bridge-wizard.sh" "$INSTALL_ROOT/scripts/ge360-bridge-wizard.sh"
   install -m 0755 "$ROOT/scripts/ge360-bridge-terminal-launcher.sh" "$INSTALL_ROOT/scripts/ge360-bridge-terminal-launcher.sh"
+  install -m 0755 "$ROOT/scripts/export-frontend-bridge-kit.sh" "$INSTALL_ROOT/scripts/export-frontend-bridge-kit.sh"
   install -m 0644 "$ROOT/config/bridge.env.example" "$INSTALL_ROOT/config/bridge.env.example"
+  rm -rf "$INSTALL_ROOT/frontend/android-sdk"
+  cp -a "$ROOT/frontend/android-sdk" "$INSTALL_ROOT/frontend/android-sdk"
+  install -m 0644 "$ROOT/docs/guided-installation.md" "$INSTALL_ROOT/docs/guided-installation.md"
+  install -m 0644 "$ROOT/docs/frontend-guided-connection.md" "$INSTALL_ROOT/docs/frontend-guided-connection.md"
   install -m 0644 "$ROOT/packaging/desktop/ge360-universal-bridge.desktop" "$INSTALL_ROOT/packaging/desktop/ge360-universal-bridge.desktop"
 fi
 
@@ -203,4 +209,5 @@ echo "Public key: $(cat "$PUBLIC_KEY")"
 echo
 echo "Launcher installato: GE360 Universal Bridge (menu applicazioni)."
 echo "Wizard terminale: sudo ge360-bridge-wizard"
+echo "Frontend kit: sudo ge360-bridge-export-frontend APP_ID"
 echo "Register each backend with /usr/local/sbin/ge360-bridge-register-app."
