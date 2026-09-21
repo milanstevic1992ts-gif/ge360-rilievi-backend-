@@ -6,6 +6,7 @@ import secrets
 import shutil
 import uuid
 from pathlib import Path
+import tomllib
 
 import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
@@ -29,6 +30,15 @@ from backend.storage import PlanStorage
 from backend.works import load_catalog
 
 logger = logging.getLogger("ge360.rilievi")
+
+def _project_version() -> str:
+    try:
+        pyproject = Path(__file__).resolve().parents[1] / "pyproject.toml"
+        with pyproject.open("rb") as fh:
+            return str(tomllib.load(fh).get("project", {}).get("version") or "unknown")
+    except Exception:
+        return "unknown"
+
 settings = get_settings()
 _runtime_api_key = read_runtime_api_key(settings)
 if settings.require_api_key and not _runtime_api_key:
@@ -46,7 +56,7 @@ if not _runtime_api_key:
 if "*" in settings.cors_origins:
     logger.warning("GE360_CORS_ORIGINS contains '*'; use explicit origins in production")
 
-app = FastAPI(title="GE360 Rilievi Backend", version="1.5.0")
+app = FastAPI(title="GE360 Rilievi Backend", version=_project_version())
 app.add_middleware(
     CORSMiddleware,
     allow_origins=list(settings.cors_origins),
