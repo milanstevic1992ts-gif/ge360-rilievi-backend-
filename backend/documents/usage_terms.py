@@ -129,4 +129,4 @@ def append_usage_terms_page(
     c.line(margin_x, 82, margin_x + 28, 82)
     c.setFillColorRGB(*blue)
     c.setFont("Helvetica-Bold", 9)
-    c.drawString(margin_x, 62, f"{brand_name} — {brand_subtitle}")
+    c.drawString(margin_x, 62, f"{brand_name} - {brand_subtitle}")
