@@ -3,9 +3,10 @@ from __future__ import annotations
 import json
 import logging
 import secrets
+import uuid
 from pathlib import Path
 
-from fastapi import Depends, FastAPI, Header, HTTPException, Request
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
@@ -312,6 +313,101 @@ class NoteRewriteRequest(BaseModel):
     targetLabel: str | None = None
     roomName: str | None = None
     context: dict = Field(default_factory=dict)
+
+
+
+
+_ALLOWED_IMAGE_MIME = {
+    "image/jpeg": ".jpg",
+    "image/png": ".png",
+    "image/webp": ".webp",
+}
+_MAX_PHOTO_BYTES = 12 * 1024 * 1024
+
+
+def _public_media(row: dict) -> dict:
+    return {
+        "id": row["media_id"],
+        "planId": row["plan_id"],
+        "targetType": row["target_type"],
+        "targetId": row.get("target_id"),
+        "caption": row.get("caption"),
+        "mimeType": row["mime_type"],
+        "filename": row["filename"],
+        "sizeBytes": row["size_bytes"],
+        "createdAt": row["created_at"],
+        "url": f"/api/v1/plans/{row['plan_id']}/photos/{row['media_id']}",
+    }
+
+
+@app.post("/api/v1/plans/{plan_id}/photos", dependencies=[Depends(require_api_key)])
+async def upload_plan_photo(
+    plan_id: str,
+    file: UploadFile = File(...),
+    targetType: str = Form("plan"),
+    targetId: str | None = Form(default=None),
+    caption: str | None = Form(default=None),
+):
+    _record_or_404(plan_id)
+    mime = (file.content_type or "").lower()
+    suffix = _ALLOWED_IMAGE_MIME.get(mime)
+    if suffix is None:
+        raise HTTPException(status_code=415, detail="Supported photos: JPEG, PNG, WEBP")
+    data = await file.read(_MAX_PHOTO_BYTES + 1)
+    if len(data) > _MAX_PHOTO_BYTES:
+        raise HTTPException(status_code=413, detail="Photo too large (max 12 MB)")
+    if not data:
+        raise HTTPException(status_code=422, detail="Empty photo")
+    if targetType not in {"plan", "wall", "room", "opening"}:
+        raise HTTPException(status_code=422, detail="Invalid photo targetType")
+    media_id = uuid.uuid4().hex
+    path = storage.media_path(plan_id, media_id, suffix)
+    storage.write_bytes_atomic(path, data)
+    row = db.add_media(
+        media_id=media_id,
+        plan_id=plan_id,
+        target_type=targetType,
+        target_id=targetId,
+        caption=(caption or "").strip()[:500] or None,
+        mime_type=mime,
+        filename=(file.filename or f"{media_id}{suffix}")[:200],
+        path=str(path),
+        size_bytes=len(data),
+    )
+    return {"ok": True, "photo": _public_media(row)}
+
+
+@app.get("/api/v1/plans/{plan_id}/photos", dependencies=[Depends(require_api_key)])
+def list_plan_photos(plan_id: str):
+    _record_or_404(plan_id)
+    return {"planId": plan_id, "photos": [_public_media(row) for row in db.list_media(plan_id)]}
+
+
+@app.get("/api/v1/plans/{plan_id}/photos/{media_id}", dependencies=[Depends(require_api_key)])
+def get_plan_photo(plan_id: str, media_id: str):
+    _record_or_404(plan_id)
+    row = db.get_media(media_id)
+    if not row or row["plan_id"] != plan_id:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    path = Path(row["path"])
+    if not path.is_file():
+        raise HTTPException(status_code=404, detail="Photo file missing")
+    return FileResponse(path, media_type=row["mime_type"], filename=row["filename"])
+
+
+@app.delete("/api/v1/plans/{plan_id}/photos/{media_id}", dependencies=[Depends(require_api_key)])
+def delete_plan_photo(plan_id: str, media_id: str):
+    _record_or_404(plan_id)
+    row = db.get_media(media_id)
+    if not row or row["plan_id"] != plan_id:
+        raise HTTPException(status_code=404, detail="Photo not found")
+    removed = db.delete_media(media_id)
+    if removed:
+        try:
+            Path(removed["path"]).unlink(missing_ok=True)
+        except OSError:
+            pass
+    return {"ok": True}
 
 
 @app.post("/api/v1/notes/rewrite", dependencies=[Depends(require_api_key)])

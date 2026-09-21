@@ -119,6 +119,29 @@ class PlanStorage:
         finally:
             os.close(fd)
 
+    def media_dir(self, plan_id: str) -> Path:
+        return self.ensure(plan_id) / 'media'
+
+    def media_path(self, plan_id: str, media_id: str, suffix: str) -> Path:
+        safe_id = ''.join(c for c in media_id if c.isalnum() or c in '-_')
+        if not safe_id or safe_id != media_id:
+            raise ValueError('invalid media id')
+        ext = suffix.lower() if suffix.startswith('.') else '.' + suffix.lower()
+        if ext not in {'.jpg', '.jpeg', '.png', '.webp'}:
+            raise ValueError('unsupported image extension')
+        return self.media_dir(plan_id) / f'{safe_id}{ext}'
+
+    @staticmethod
+    def write_bytes_atomic(path: Path, data: bytes) -> None:
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_name(path.name + f'.tmp-{uuid.uuid4().hex}')
+        with tmp.open('wb') as fh:
+            fh.write(data)
+            fh.flush()
+            os.fsync(fh.fileno())
+        os.replace(tmp, path)
+        PlanStorage._fsync_dir(path.parent)
+
     def append_log(self, plan_id: str, event: dict[str, Any]) -> None:
         p = self.ensure(plan_id) / 'logs/processing.jsonl'
         row = {'ts': datetime.now(timezone.utc).isoformat(), **event}

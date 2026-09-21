@@ -41,7 +41,10 @@ def test_svg_png_pdf_and_plan3d(tmp_path:Path):
     assert svg.read_text(encoding='utf-8').startswith('<svg')
     assert svg.stat().st_size>500
     with Image.open(png) as im: assert im.size==(1600,1100) and im.format=='PNG'
-    assert pdf.read_bytes().startswith(b'%PDF') and pdf.stat().st_size>1000
+    pdf_bytes=pdf.read_bytes()
+    assert pdf_bytes.startswith(b'%PDF') and pdf.stat().st_size>1000
+    assert b'EDIL MILAN STEVIC' in pdf_bytes
+    assert b'RIEPILOGO STANZE' in pdf_bytes
     data=json.loads(p3.read_text())
     assert data['units']=='mm'
     assert sorted(round(w['length']) for w in data['walls'])==[2000,2000,3000,3000]

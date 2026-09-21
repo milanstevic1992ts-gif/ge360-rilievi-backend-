@@ -39,6 +39,21 @@ CREATE INDEX IF NOT EXISTS idx_jobs_status ON jobs(status, updated_at);
 CREATE UNIQUE INDEX IF NOT EXISTS idx_jobs_one_active_plan
 ON jobs(plan_id)
 WHERE status IN ('QUEUED','PROCESSING');
+
+CREATE TABLE IF NOT EXISTS plan_media (
+ media_id TEXT PRIMARY KEY,
+ plan_id TEXT NOT NULL,
+ target_type TEXT NOT NULL,
+ target_id TEXT,
+ caption TEXT,
+ mime_type TEXT NOT NULL,
+ filename TEXT NOT NULL,
+ path TEXT NOT NULL,
+ size_bytes INTEGER NOT NULL,
+ created_at TEXT NOT NULL,
+ FOREIGN KEY(plan_id) REFERENCES plans(plan_id)
+);
+CREATE INDEX IF NOT EXISTS idx_plan_media_plan ON plan_media(plan_id, created_at DESC);
 """
 
 def _utcnow() -> str:
@@ -197,3 +212,42 @@ class Database:
             "result": json.loads(result_raw) if result_raw else None,
             "error": out.pop("error"),
         }
+
+
+# ---------------- plan photos / evidence ----------------
+
+def _db_add_media(self, *, media_id: str, plan_id: str, target_type: str, target_id: str | None,
+                  caption: str | None, mime_type: str, filename: str, path: str, size_bytes: int) -> dict:
+    now = _utcnow()
+    with self.connect() as con:
+        con.execute(
+            """INSERT INTO plan_media(media_id,plan_id,target_type,target_id,caption,mime_type,filename,path,size_bytes,created_at)
+               VALUES(?,?,?,?,?,?,?,?,?,?)""",
+            (media_id, plan_id, target_type, target_id, caption, mime_type, filename, path, int(size_bytes), now),
+        )
+        con.commit()
+    return self.get_media(media_id) or {}
+
+def _db_get_media(self, media_id: str) -> dict | None:
+    with self.connect() as con:
+        row = con.execute("SELECT * FROM plan_media WHERE media_id=?", (media_id,)).fetchone()
+    return dict(row) if row else None
+
+def _db_list_media(self, plan_id: str) -> list[dict]:
+    with self.connect() as con:
+        rows = con.execute("SELECT * FROM plan_media WHERE plan_id=? ORDER BY created_at ASC", (plan_id,)).fetchall()
+    return [dict(row) for row in rows]
+
+def _db_delete_media(self, media_id: str) -> dict | None:
+    with self.connect() as con:
+        row = con.execute("SELECT * FROM plan_media WHERE media_id=?", (media_id,)).fetchone()
+        if not row:
+            return None
+        con.execute("DELETE FROM plan_media WHERE media_id=?", (media_id,))
+        con.commit()
+    return dict(row)
+
+Database.add_media = _db_add_media
+Database.get_media = _db_get_media
+Database.list_media = _db_list_media
+Database.delete_media = _db_delete_media
