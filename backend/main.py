@@ -10,7 +10,7 @@ from pathlib import Path
 import httpx
 from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -66,6 +66,11 @@ if setup_dir.is_dir():
 control_dir = Path(__file__).resolve().parents[1] / "control"
 if control_dir.is_dir():
     app.mount("/control", StaticFiles(directory=control_dir, html=True), name="control")
+
+
+@app.get("/", include_in_schema=False)
+def backend_home():
+    return RedirectResponse(url="/control/", status_code=307)
 
 ARTIFACTS: dict[str, tuple[str, str, bool]] = {
     "processed": ("processed-plan.json", "application/json", False),
