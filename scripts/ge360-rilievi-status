@@ -1,0 +1,9 @@
+#!/usr/bin/env bash
+set -u
+SERVICE=ge360-rilievi-backend.service
+echo "=== GE360 Rilievi Backend ==="
+systemctl --no-pager --full status "$SERVICE" || true
+echo
+echo "Health:"
+curl -fsS --max-time 3 http://127.0.0.1:9888/healthz 2>/dev/null || echo "backend not responding on 127.0.0.1:9888"
+echo
