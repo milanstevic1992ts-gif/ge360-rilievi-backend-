@@ -194,6 +194,40 @@ def resolve_works(model, raw_works: list[Any] | None) -> list[dict[str, Any]]:
             source = "catalog-count"
             quantity_basis = "conteggio"
 
+        elif target_type == "wall" and rule in {"ROOM_NET_WALLS", "ROOM_GROSS_WALLS", "ROOM_TILING", "ROOM_TILING_OR_NET_WALLS"}:
+            translated = "WALL_GROSS_AREA" if rule == "ROOM_GROSS_WALLS" else "WALL_NET_AREA"
+            selected_walls = [walls[wid] for wid in target_ids if wid in walls]
+            values: list[float] = []
+            for wall in selected_walls:
+                value, basis = _wall_value(model, wall, translated)
+                if value is None:
+                    continue
+                values.append(value)
+                wall_rooms = rooms_by_wall.get(wall.id, [])
+                wall_name = _target_label_for_wall(model, wall, wall_rooms)
+                breakdown.append(
+                    {
+                        "targetType": "wall",
+                        "targetId": wall.id,
+                        "targetName": wall_name,
+                        "roomIds": [room.roomId for room in wall_rooms],
+                        "roomNames": [room.name for room in wall_rooms],
+                        "quantity": value,
+                        "unit": str(raw.get("unit") or item.get("unit") or ""),
+                        "basis": "superficie netta muro selezionato" if translated == "WALL_NET_AREA" else "superficie lorda muro selezionato",
+                        "lengthM": _round(_wall_length_m(wall)),
+                        "heightM": _round(float(wall.heightMm) / 1000.0),
+                        "thicknessMm": _round(float(wall.thicknessMm)),
+                        "needsReview": rule in {"ROOM_TILING", "ROOM_TILING_OR_NET_WALLS"},
+                    }
+                )
+                target_names.append(wall_name)
+            if values:
+                quantity = round(sum(values), 4)
+                source = "authoritative-wall-geometry"
+                quantity_basis = breakdown[0]["basis"] if len(breakdown) == 1 else "somma superfici muri selezionati"
+            needs_review = rule in {"ROOM_TILING", "ROOM_TILING_OR_NET_WALLS"} or not bool(values)
+
         elif rule.startswith("ROOM_"):
             selected = (
                 [rooms[rid] for rid in target_ids if rid in rooms]
