@@ -25,6 +25,7 @@ find_script() {
 CORE="$(find_script install-universal-bridge-core.sh /usr/local/sbin/ge360-bridge-core-install)"
 NET="$(find_script ge360-bridge-network-auto.sh /usr/local/sbin/ge360-bridge-network-auto)"
 REGISTER="$(find_script register-bridge-app.sh /usr/local/sbin/ge360-bridge-register-app)"
+EXPORT_FRONTEND="$(find_script export-frontend-bridge-kit.sh /usr/local/sbin/ge360-bridge-export-frontend)"
 
 clear || true
 cat <<'EOF'
@@ -51,7 +52,7 @@ echo "[2/5] Configurazione automatica rete pubblica..."
 bash "$NET" --apply || true
 
 echo
-echo "[3/5] Registrazione backend..."
+echo "[3/6] Registrazione backend..."
 if $AUTO; then
   if [[ -n "${APP_ID:-}" && -n "${APP_PORT:-}" ]]; then
     APP_ID="$APP_ID" APP_NAME="${APP_NAME:-$APP_ID}" APP_PORT="$APP_PORT"     APP_SERVICE="${APP_SERVICE:-}" APP_HEALTH_URL="${APP_HEALTH_URL:-}"     bash "$REGISTER"
@@ -74,14 +75,31 @@ else
 fi
 
 echo
-echo "[4/5] Avvio e persistenza..."
+echo
+echo "[4/6] Pacchetto frontend..."
+if [[ -n "${app_id:-}" ]]; then
+  if $AUTO; then
+    bash "$EXPORT_FRONTEND" "$app_id" || true
+  else
+    read -r -p "Vuoi creare ora lo ZIP frontend per $app_id? [S/n] " frontend_answer
+    frontend_answer="${frontend_answer:-S}"
+    if [[ "$frontend_answer" =~ ^[SsYy]$ ]]; then
+      bash "$EXPORT_FRONTEND" "$app_id" || true
+    fi
+  fi
+elif $AUTO && [[ -n "${APP_ID:-}" ]]; then
+  bash "$EXPORT_FRONTEND" "$APP_ID" || true
+fi
+
+echo
+echo "[5/6] Avvio e persistenza..."
 systemctl daemon-reload
 systemctl restart ge360-direct-bridge-firewall.service || true
 systemctl restart wg-quick@wg0.service || true
 systemctl restart ge360-boot-verify.service || true
 
 echo
-echo "[5/5] Verifica finale..."
+echo "[6/6] Verifica finale..."
 echo "-- WireGuard --"
 wg show wg0 || true
 echo
