@@ -17,7 +17,12 @@ def wall(id,a,b,length): return {"id":id,"a":{"x":a[0],"y":a[1]},"b":{"x":b[0],"
 def model():
     p=PlanPayload.model_validate({"planId":"exports","name":"Stanza 2x3","wallHeightM":2.7,"walls":[
       wall("w1",(0,0),(205,8),200),wall("w2",(205,8),(214,310),300),wall("w3",(214,310),(4,301),200),wall("w4",(4,301),(0,0),300),
-    ],"works":[{"id":"wk1","catalogId":"paint.walls_ceiling","targetType":"plan"}],"openings":[{"id":"d1","type":"door","wallId":"w2","widthCm":80,"offsetCm":60,"referenceEnd":"a"},{"id":"f1","type":"window","wallId":"w4","widthCm":100,"offsetCm":80,"referenceEnd":"a","heightCm":120,"sillHeightCm":90}]})
+    ],"rooms":[{"id":"room-a","name":"Cucina","wallIds":["w1","w2","w3","w4"]}],
+    "notes":[{"id":"note-1","targetType":"room","targetId":"room-a","targetLabel":"Cucina","rawText":"Verificare attacchi cucina prima delle lavorazioni"}],
+    "works":[
+      {"id":"wk1","catalogId":"paint.walls_ceiling","targetType":"plan"},
+      {"id":"wk2","catalogId":"wall.demolish","targetType":"wall","targetId":"w1"}
+    ],"openings":[{"id":"d1","type":"door","wallId":"w2","widthCm":80,"offsetCm":60,"referenceEnd":"a"},{"id":"f1","type":"window","wallId":"w4","widthCm":100,"offsetCm":80,"referenceEnd":"a","heightCm":120,"sillHeightCm":90}]})
     n=normalize_payload(p); t=build_topology(n); s=solve_geometry(n,t); m=build_cad_model(n,s)
     from backend.works import resolve_works
     m.metadata["works"]=resolve_works(m,p.works)
@@ -64,6 +69,9 @@ def test_svg_png_pdf_and_plan3d(tmp_path:Path):
     assert b'Misure ricavate per calcolo.' in pdf_bytes
     assert b'Uso concordato e diffusione.' in pdf_bytes
     assert b'Pitturazione pareti + soffitto' in pdf_bytes
+    assert b'Demolizione parete' in pdf_bytes
+    assert b'DETTAGLIO CALCOLI' in pdf_bytes
+    assert b'Verificare attacchi cucina prima delle lavorazioni' in pdf_bytes
     assert b'intelligenza artificiale' not in pdf_bytes.lower()
     data=json.loads(p3.read_text())
     assert data['units']=='mm'
