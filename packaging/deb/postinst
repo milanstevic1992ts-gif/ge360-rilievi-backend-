@@ -102,6 +102,12 @@ find "$APP_DIR/.venv/bin" -type f -exec chmod g+rx {} + 2>/dev/null || true
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
+  if [ -f "$APP_DIR/packaging/deb/ge360-boot-verify.service" ] && [ -f "$APP_DIR/scripts/ge360-boot-verify.sh" ]; then
+    install -m 0755 "$APP_DIR/scripts/ge360-boot-verify.sh" /usr/local/sbin/ge360-boot-verify || true
+    install -m 0644 "$APP_DIR/packaging/deb/ge360-boot-verify.service" /etc/systemd/system/ge360-boot-verify.service || true
+    systemctl daemon-reload || true
+    systemctl enable ge360-boot-verify.service >/dev/null 2>&1 || true
+  fi
   if [ -d /run/systemd/system ]; then
     if systemctl restart "$SERVICE"; then
       echo "GE360: service started successfully."
