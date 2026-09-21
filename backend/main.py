@@ -223,7 +223,7 @@ def health():
         "service": "ge360-rilievi-backend",
         "version": "1.4.0",
         "aiEnabled": settings.ai_enabled,
-        "apiKeyRequired": settings.require_api_key,
+        "apiKeyRequired": bool(read_runtime_api_key(settings)) or settings.require_api_key,
         "setupUrl": "/setup/",
     }
 

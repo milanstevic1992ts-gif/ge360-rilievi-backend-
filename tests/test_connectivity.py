@@ -62,6 +62,9 @@ def test_local_setup_generates_key_and_auth_uses_it_immediately(tmp_path: Path, 
     monkeypatch.setenv("GE360_DATA_DIR", str(tmp_path / "api"))
     monkeypatch.setenv("GE360_DB_PATH", str(tmp_path / "api" / "db.sqlite3"))
     monkeypatch.setenv("GE360_AI_ENABLED", "false")
+    # Runtime setup-key generation is a local/development escape hatch only.
+    # Production startup is blocked before the app loads when the key is missing.
+    monkeypatch.setenv("GE360_REQUIRE_API_KEY", "false")
 
     import backend.main as main
     main = importlib.reload(main)
