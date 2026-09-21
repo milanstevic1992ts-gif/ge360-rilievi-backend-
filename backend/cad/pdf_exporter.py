@@ -9,6 +9,7 @@ from reportlab.lib.utils import ImageReader
 from reportlab.pdfgen import canvas
 
 from backend.cad.renderer import model_bounds, point_along, wall_unit
+from backend.documents.usage_terms import append_usage_terms_page
 from backend.models import PlanModel
 
 BRAND_NAME = os.getenv("GE360_BRAND_NAME", "EDIL MILAN STEVIC")
@@ -242,4 +243,12 @@ def export_pdf(model: PlanModel, path: Path) -> None:
     c.setFillColorRGB(0.35, 0.39, 0.47)
     c.setFont("Helvetica", 5.8)
     c.drawString(margin, 25, "Documento generato dal backend GE360 Rilievi")
+
+    append_usage_terms_page(
+        c,
+        document_name=model.name,
+        brand_name=BRAND_NAME,
+        brand_subtitle=BRAND_SUBTITLE,
+        brand_tagline=BRAND_TAGLINE,
+    )
     c.save()
