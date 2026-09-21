@@ -609,6 +609,11 @@ def _draw_plan_page(c, model: PlanModel) -> None:
         c.setFillColorRGB(*CHARCOAL)
         c.setFont("Helvetica", 8)
         c.drawCentredString(x, y - 7, _m2(room.floorAreaM2))
+        codes = _room_work_codes(model, room)
+        if codes:
+            c.setFillColorRGB(*ORANGE)
+            c.setFont("Helvetica-Bold", 6.2)
+            c.drawCentredString(x, y - 17, " · ".join(codes))
 
     center_xy = ((b.min_x + b.max_x) / 2, (b.min_y + b.max_y) / 2)
     estimated_on_page = False
@@ -669,6 +674,178 @@ def _room_has_estimates(room) -> bool:
     return bool(getattr(room, "estimatedWallIds", None) or getattr(room, "calculatedWallIds", None))
 
 
+def _work_code(category: str) -> str:
+    key = str(category or "Altro").strip().lower()
+    mapping = {
+        "demolizioni": "DEM",
+        "pittura": "PITT",
+        "rasature": "RAS",
+        "pavimenti": "PAV",
+        "rivestimenti": "RIV",
+        "cartongesso": "CART",
+        "muratura": "MUR",
+        "impianti": "IMP",
+        "elettrico": "ELE",
+        "idraulico": "IDR",
+        "bagno": "BAG",
+        "cucina": "CUC",
+        "impermeabilizzazioni": "IMPERM",
+        "finiture": "FIN",
+        "esterni": "EST",
+        "generale": "GEN",
+        "altro": "ALTRO",
+    }
+    return mapping.get(key, (key[:5] or "ALTRO").upper())
+
+
+def _format_quantity(quantity: Any, unit: str = "") -> str:
+    if quantity is None:
+        return "DA VERIFICARE"
+    try:
+        value = float(quantity)
+    except (TypeError, ValueError):
+        return "DA VERIFICARE"
+    if unit == "cad.":
+        text = str(int(value)) if value.is_integer() else f"{value:.1f}".replace(".", ",")
+    else:
+        text = f"{value:.2f}".replace(".", ",")
+    return (text + (" " + unit if unit else "")).strip()
+
+
+def _room_note_rows(model: PlanModel, room) -> list[dict[str, str]]:
+    opening_ids = {opening.id for opening in room.openings}
+    rows: list[dict[str, str]] = []
+    for note in model.notes:
+        if not isinstance(note, dict):
+            continue
+        target_type = str(note.get("targetType") or "")
+        target_id = str(note.get("targetId") or "")
+        belongs = (
+            (target_type in {"room", "floor", "ceiling"} and target_id == str(room.roomId))
+            or (target_type == "wall" and target_id in set(room.wallIds))
+            or (target_type == "opening" and target_id in opening_ids)
+            or (str(note.get("roomName") or "") == str(room.name))
+        )
+        if not belongs:
+            continue
+        raw = str(note.get("rawText") or note.get("text") or note.get("content") or note.get("note") or "").strip()
+        cleaned = str(note.get("cleanedText") or "").strip()
+        text = cleaned or raw
+        tasks = [str(item).strip() for item in (note.get("tasks") or []) if str(item).strip()]
+        if tasks:
+            suffix = "Attività: " + "; ".join(tasks)
+            text = (text + " - " + suffix).strip(" -") if text else suffix
+        if not text:
+            continue
+        rows.append(
+            {
+                "label": str(note.get("targetLabel") or note.get("label") or "Appunto"),
+                "text": text,
+            }
+        )
+    return rows
+
+
+def _room_work_rows(model: PlanModel, room) -> list[dict[str, Any]]:
+    rows: list[dict[str, Any]] = []
+    seen: set[tuple[str, str]] = set()
+    for work in model.metadata.get("works") or []:
+        breakdown = list(work.get("breakdown") or [])
+        matched = False
+        for part in breakdown:
+            target_type = str(part.get("targetType") or "")
+            target_id = str(part.get("targetId") or "")
+            room_ids = [str(value) for value in (part.get("roomIds") or [])]
+            belongs = (
+                (target_type == "room" and target_id == str(room.roomId))
+                or (target_type in {"wall", "opening"} and str(room.roomId) in room_ids)
+            )
+            if not belongs:
+                continue
+            key = (str(work.get("id") or ""), target_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            matched = True
+            row = dict(work)
+            row["quantity"] = part.get("quantity")
+            row["unit"] = part.get("unit") or work.get("unit") or ""
+            row["quantityBasis"] = part.get("basis") or work.get("quantityBasis") or ""
+            row["targetName"] = part.get("targetName") or room.name
+            row["needsReview"] = bool(work.get("needsReview") or part.get("needsReview"))
+            rows.append(row)
+
+        if matched:
+            continue
+
+        if str(work.get("targetType") or "") == "room" and str(work.get("targetId") or "") == str(room.roomId):
+            key = (str(work.get("id") or ""), str(room.roomId))
+            if key in seen:
+                continue
+            seen.add(key)
+            row = dict(work)
+            row["targetName"] = room.name
+            rows.append(row)
+
+    return rows
+
+
+def _room_work_codes(model: PlanModel, room) -> list[str]:
+    codes: list[str] = []
+    for work in _room_work_rows(model, room):
+        code = _work_code(str(work.get("category") or "Altro"))
+        if code not in codes:
+            codes.append(code)
+    return codes[:5]
+
+
+def _work_summary(model: PlanModel) -> list[dict[str, Any]]:
+    stored = model.metadata.get("workSummary")
+    if isinstance(stored, list) and stored:
+        return list(stored)
+
+    grouped: dict[tuple[str, str, str], dict[str, Any]] = {}
+    for work in model.metadata.get("works") or []:
+        key = (
+            str(work.get("catalogId") or work.get("label") or ""),
+            str(work.get("label") or ""),
+            str(work.get("unit") or ""),
+        )
+        row = grouped.setdefault(
+            key,
+            {
+                "catalogId": work.get("catalogId"),
+                "label": work.get("label") or "",
+                "category": work.get("category") or "Altro",
+                "unit": work.get("unit") or "",
+                "quantity": 0.0,
+                "resolvedItems": 0,
+                "unresolvedItems": 0,
+                "needsReview": False,
+            },
+        )
+        if work.get("quantity") is None:
+            row["unresolvedItems"] += 1
+        else:
+            row["quantity"] = round(float(row["quantity"]) + float(work["quantity"]), 4)
+            row["resolvedItems"] += 1
+        row["needsReview"] = bool(row["needsReview"] or work.get("needsReview"))
+
+    return sorted(grouped.values(), key=lambda row: (str(row["category"]), str(row["label"])))
+
+
+def _draw_work_badge(c, x: float, y: float, category: str, *, width: float = 38) -> None:
+    c.setFillColorRGB(*LIGHT)
+    c.setStrokeColorRGB(*LINE)
+    c.setLineWidth(0.4)
+    c.roundRect(x, y - 10, width, 16, 4, stroke=1, fill=1)
+    c.setFillColorRGB(*ORANGE)
+    c.rect(x, y - 10, 3, 16, stroke=0, fill=1)
+    c.setFillColorRGB(*BLUE)
+    c.setFont("Helvetica-Bold", 6.2)
+    c.drawCentredString(x + width / 2 + 1, y - 4, _work_code(category))
+
+
 def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: float, width: float, height: float) -> None:
     c.setFillColorRGB(*WHITE)
     c.setStrokeColorRGB(*LINE)
@@ -683,6 +860,13 @@ def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: flo
     c.setFillColorRGB(*BLUE)
     c.setFont("Helvetica-Bold", 14)
     c.drawString(x + 42, y_top - 22, room.name[:45])
+
+    codes = _room_work_codes(model, room)
+    if codes:
+        code_text = " · ".join(codes)
+        c.setFillColorRGB(*ORANGE)
+        c.setFont("Helvetica-Bold", 6.8)
+        c.drawRightString(x + width - 14, y_top - 21, code_text)
 
     metric_y = y_top - 54
     gap = 7
@@ -710,6 +894,8 @@ def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: flo
         ("Perimetro", f"{room.perimeterM:.2f} m".replace(".", ",")),
         ("Aperture detratte", _m2(room.openingsAreaM2)),
     ]
+    if room.tilingAreaM2 is not None:
+        rows.append(("Rivestimento", _m2(room.tilingAreaM2)))
     c.setFont("Helvetica", 8.5)
     for label, value in rows:
         c.setFillColorRGB(*MUTED)
@@ -719,9 +905,10 @@ def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: flo
         c.setStrokeColorRGB(*LINE)
         c.setLineWidth(0.35)
         c.line(x + 16, yy - 5, x + width - 16, yy - 5)
-        yy -= 20
+        yy -= 18
 
     if room.openings:
+        yy -= 2
         c.setFillColorRGB(*BLUE)
         c.setFont("Helvetica-Bold", 7.5)
         c.drawString(x + 16, yy, "APERTURE")
@@ -733,35 +920,97 @@ def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: flo
             text = f"{kind} - {_m(opening.widthMm, 2)} x {_m(opening.heightMm, 2)}"
             c.drawString(x + 16, yy, text)
             yy -= 13
+        if len(room.openings) > 4:
+            c.setFillColorRGB(*MUTED)
+            c.drawString(x + 16, yy, f"+ {len(room.openings) - 4} altre aperture")
+            yy -= 13
+
+    works = _room_work_rows(model, room)
+    if works:
+        yy -= 6
+        c.setFillColorRGB(*BLUE)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.drawString(x + 16, yy, "LAVORAZIONI SELEZIONATE")
+        yy -= 20
+
+        available_rows = max(1, min(7, int((yy - (y_top - height + 105)) / 29)))
+        shown = works[:available_rows]
+        for work in shown:
+            _draw_work_badge(c, x + 16, yy, str(work.get("category") or "Altro"))
+            c.setFillColorRGB(*CHARCOAL)
+            c.setFont("Helvetica-Bold", 7.8)
+            c.drawString(x + 62, yy, str(work.get("label") or "")[:52])
+            quantity_color = ORANGE if work.get("needsReview") else BLUE
+            c.setFillColorRGB(*quantity_color)
+            c.setFont("Helvetica-Bold", 8)
+            c.drawRightString(
+                x + width - 16,
+                yy,
+                _format_quantity(work.get("quantity"), str(work.get("unit") or "")),
+            )
+            detail = str(work.get("targetName") or work.get("quantityBasis") or "")
+            basis = str(work.get("quantityBasis") or "")
+            if detail and basis and detail != basis:
+                detail += " · " + basis
+            c.setFillColorRGB(*MUTED)
+            c.setFont("Helvetica", 6.6)
+            c.drawString(x + 62, yy - 11, detail[:82])
+            yy -= 29
+
+        if len(works) > len(shown):
+            c.setFillColorRGB(*MUTED)
+            c.setFont("Helvetica-Oblique", 7)
+            c.drawString(x + 16, yy, f"+ {len(works) - len(shown)} lavorazioni nel riepilogo dettagliato")
+            yy -= 14
+
+    notes = _room_note_rows(model, room)
+    if notes and yy > y_top - height + 72:
+        yy -= 6
+        c.setFillColorRGB(*BLUE)
+        c.setFont("Helvetica-Bold", 8.5)
+        c.drawString(x + 16, yy, "NOTE E APPUNTI")
+        yy -= 15
+        for note in notes[:2]:
+            c.setFillColorRGB(*ORANGE)
+            c.setFont("Helvetica-Bold", 6.8)
+            c.drawString(x + 16, yy, note["label"][:38])
+            c.setFillColorRGB(*CHARCOAL)
+            c.setFont("Helvetica", 7.2)
+            note_lines = _wrap(note["text"], "Helvetica", 7.2, width - 34)[:2]
+            for line_text in note_lines:
+                yy -= 10
+                c.drawString(x + 16, yy, line_text)
+            yy -= 12
 
     if _room_has_estimates(room):
         c.setFillColorRGB(*ORANGE)
-        c.setFont("Helvetica-Oblique", 8)
-        _draw_wrapped(c, ESTIMATED_NOTE, x + 16, y_top - height + 22, width - 32, font="Helvetica-Oblique", size=8, leading=10, color=ORANGE, max_lines=2)
+        _draw_wrapped(
+            c,
+            ESTIMATED_NOTE,
+            x + 16,
+            y_top - height + 28,
+            width - 32,
+            font="Helvetica-Oblique",
+            size=7.4,
+            leading=9,
+            color=ORANGE,
+            max_lines=2,
+        )
 
 
 def _draw_room_pages(c, model: PlanModel) -> None:
     if not model.rooms:
         return
-    page = A4
-    pw, ph = page
+    pw, ph = A4
     mx = 15 * MM
-    rooms = list(model.rooms)
-    page_index = 0
-    for start in range(0, len(rooms), 2):
+    for index, room in enumerate(model.rooms, start=1):
         c.showPage()
-        c.setPageSize(page)
+        c.setPageSize(A4)
         top = _draw_internal_header(c, model, pw, ph)
-        title_y = _draw_section_title(c, mx, top - 5, "02", "Schede ambiente")
+        title_y = _draw_section_title(c, mx, top - 5, "02", "Scheda ambiente")
         card_top = title_y - 2
-        available = card_top - 64
-        gap = 14
-        card_h = (available - gap) / 2
-        batch = rooms[start : start + 2]
-        for offset, room in enumerate(batch):
-            y_top = card_top - offset * (card_h + gap)
-            _draw_room_card(c, model, room, start + offset + 1, mx, y_top, pw - 2 * mx, card_h)
-        page_index += 1
+        card_h = card_top - 64
+        _draw_room_card(c, model, room, index, mx, card_top, pw - 2 * mx, card_h)
 
 
 def _draw_summary_page(c, model: PlanModel) -> None:
@@ -850,42 +1099,189 @@ def _draw_summary_page(c, model: PlanModel) -> None:
         c.drawString(xx + 12, totals_y + 18, label.upper())
 
 
+def _new_work_page(c, model: PlanModel, continued: bool = False) -> tuple[float, float, float]:
+    c.showPage()
+    c.setPageSize(A4)
+    pw, ph = A4
+    mx = 15 * MM
+    top = _draw_internal_header(c, model, pw, ph)
+    title = "Lavorazioni rilevate - continua" if continued else "Lavorazioni rilevate e quantità"
+    y = _draw_section_title(c, mx, top - 5, "04", title)
+    return pw, mx, y
+
+
+def _draw_work_pages(c, model: PlanModel) -> None:
+    works = list(model.metadata.get("works") or [])
+    if not works:
+        return
+
+    summary = _work_summary(model)
+    pw, mx, y = _new_work_page(c, model)
+
+    c.setFillColorRGB(*CHARCOAL)
+    c.setFont("Helvetica", 8.5)
+    c.drawString(mx, y, "Quantità calcolate dalla geometria del rilievo quando il dato è disponibile.")
+    y -= 22
+
+    c.setFillColorRGB(*BLUE)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(mx, y, "RIEPILOGO TOTALE LAVORAZIONI")
+    y -= 15
+
+    header_h = 20
+    col_qty = 88
+    c.setFillColorRGB(*BLUE)
+    c.rect(mx, y - header_h, pw - 2 * mx, header_h, stroke=0, fill=1)
+    c.setFillColorRGB(*WHITE)
+    c.setFont("Helvetica-Bold", 7.2)
+    c.drawString(mx + 8, y - 13, "Lavorazione")
+    c.drawRightString(pw - mx - 8, y - 13, "Quantità")
+    y -= header_h
+
+    for index, row in enumerate(summary):
+        if y < 115:
+            pw, mx, y = _new_work_page(c, model, continued=True)
+            c.setFillColorRGB(*BLUE)
+            c.rect(mx, y - header_h, pw - 2 * mx, header_h, stroke=0, fill=1)
+            c.setFillColorRGB(*WHITE)
+            c.setFont("Helvetica-Bold", 7.2)
+            c.drawString(mx + 8, y - 13, "Lavorazione")
+            c.drawRightString(pw - mx - 8, y - 13, "Quantità")
+            y -= header_h
+
+        if index % 2:
+            c.setFillColorRGB(*LIGHT)
+            c.rect(mx, y - 24, pw - 2 * mx, 24, stroke=0, fill=1)
+        _draw_work_badge(c, mx + 6, y - 7, str(row.get("category") or "Altro"))
+        c.setFillColorRGB(*CHARCOAL)
+        c.setFont("Helvetica-Bold", 7.8)
+        c.drawString(mx + 50, y - 13, str(row.get("label") or "")[:62])
+        c.setFillColorRGB(*(ORANGE if row.get("needsReview") else BLUE))
+        c.setFont("Helvetica-Bold", 8)
+        quantity = row.get("quantity") if row.get("resolvedItems", 0) else None
+        qty_text = _format_quantity(quantity, str(row.get("unit") or ""))
+        if row.get("unresolvedItems"):
+            qty_text += " *"
+        c.drawRightString(pw - mx - 8, y - 13, qty_text)
+        y -= 24
+
+    y -= 18
+    if y < 135:
+        pw, mx, y = _new_work_page(c, model, continued=True)
+
+    c.setFillColorRGB(*BLUE)
+    c.setFont("Helvetica-Bold", 9)
+    c.drawString(mx, y, "DETTAGLIO CALCOLI")
+    y -= 16
+
+    for work in works:
+        breakdown = list(work.get("breakdown") or [])
+        detail_lines: list[str] = []
+        if breakdown:
+            for part in breakdown:
+                target = str(part.get("targetName") or "")
+                basis = str(part.get("basis") or "")
+                qty = _format_quantity(part.get("quantity"), str(part.get("unit") or work.get("unit") or ""))
+                line = " - ".join(value for value in [target, basis, qty] if value)
+                if line:
+                    detail_lines.append(line)
+        else:
+            target = ", ".join(str(v) for v in (work.get("targetNames") or []) if v)
+            basis = str(work.get("quantityBasis") or "")
+            qty = _format_quantity(work.get("quantity"), str(work.get("unit") or ""))
+            line = " - ".join(value for value in [target, basis, qty] if value)
+            if line:
+                detail_lines.append(line)
+
+        if not detail_lines:
+            detail_lines = ["Quantità da verificare o inserire manualmente."]
+
+        needed = 31 + min(3, len(detail_lines)) * 10 + (12 if work.get("note") else 0)
+        if y - needed < 70:
+            pw, mx, y = _new_work_page(c, model, continued=True)
+            c.setFillColorRGB(*BLUE)
+            c.setFont("Helvetica-Bold", 9)
+            c.drawString(mx, y, "DETTAGLIO CALCOLI")
+            y -= 16
+
+        _draw_work_badge(c, mx, y - 2, str(work.get("category") or "Altro"), width=42)
+        c.setFillColorRGB(*CHARCOAL)
+        c.setFont("Helvetica-Bold", 8.2)
+        c.drawString(mx + 50, y - 5, str(work.get("label") or "")[:62])
+        c.setFillColorRGB(*(ORANGE if work.get("needsReview") else BLUE))
+        c.setFont("Helvetica-Bold", 8.2)
+        c.drawRightString(
+            pw - mx,
+            y - 5,
+            _format_quantity(work.get("quantity"), str(work.get("unit") or "")),
+        )
+        y -= 17
+
+        c.setFillColorRGB(*MUTED)
+        c.setFont("Helvetica", 6.8)
+        for line_text in detail_lines[:3]:
+            c.drawString(mx + 50, y, line_text[:92])
+            y -= 10
+        if len(detail_lines) > 3:
+            c.drawString(mx + 50, y, f"+ {len(detail_lines) - 3} ulteriori dettagli")
+            y -= 10
+
+        note = str(work.get("note") or "").strip()
+        if note:
+            c.setFillColorRGB(*CHARCOAL)
+            c.setFont("Helvetica-Oblique", 6.8)
+            c.drawString(mx + 50, y, ("Nota: " + note)[:92])
+            y -= 11
+
+        c.setStrokeColorRGB(*LINE)
+        c.setLineWidth(0.35)
+        c.line(mx, y, pw - mx, y)
+        y -= 11
+
+    if any(row.get("needsReview") or row.get("unresolvedItems") for row in summary):
+        if y < 90:
+            pw, mx, y = _new_work_page(c, model, continued=True)
+        c.setFillColorRGB(*ORANGE)
+        _draw_wrapped(
+            c,
+            "* Le quantità marcate DA VERIFICARE oppure con asterisco richiedono una misura, "
+            "un'altezza di rivestimento o una quantità manuale non ancora definita.",
+            mx,
+            y,
+            pw - 2 * mx,
+            font="Helvetica-Oblique",
+            size=7.8,
+            leading=10,
+            color=ORANGE,
+            max_lines=3,
+        )
+
+
 def _note_lines(model: PlanModel) -> list[tuple[str, str]]:
     items: list[tuple[str, str]] = []
     for note in model.notes:
         if isinstance(note, dict):
             label = str(note.get("targetLabel") or note.get("title") or note.get("label") or "Nota")
-            text = str(
-                note.get("text")
+            raw = str(
+                note.get("rawText")
+                or note.get("text")
                 or note.get("content")
                 or note.get("note")
-                or note.get("rawText")
                 or note.get("description")
                 or ""
             ).strip()
+            cleaned = str(note.get("cleanedText") or "").strip()
+            text = cleaned or raw
+            tasks = [str(item).strip() for item in (note.get("tasks") or []) if str(item).strip()]
+            if tasks:
+                task_text = "Attività: " + "; ".join(tasks)
+                text = (text + " - " + task_text).strip(" -") if text else task_text
             if text:
                 items.append((label, text))
         else:
             text = str(note).strip()
             if text:
                 items.append(("Nota", text))
-
-    works = list(model.metadata.get("works") or [])
-    for work in works:
-        label = str(work.get("label") or "Lavorazione rilevata").strip()
-        qty = work.get("quantity")
-        unit = str(work.get("unit") or "").strip()
-        target_names = work.get("targetNames") or []
-        target = ", ".join(str(x) for x in target_names if x)
-        parts = []
-        if target:
-            parts.append(target)
-        if qty is not None:
-            parts.append((f"{float(qty):.2f}".replace(".", ",") + (f" {unit}" if unit else "")).strip())
-        note = str(work.get("note") or "").strip()
-        if note:
-            parts.append(note)
-        items.append((label, " - ".join(parts) if parts else "Voce rilevata nel sopralluogo."))
     return items
 
 
@@ -899,7 +1295,7 @@ def _draw_notes_pages(c, model: PlanModel) -> None:
     pw, ph = A4
     mx = 15 * MM
     top = _draw_internal_header(c, model, pw, ph)
-    y = _draw_section_title(c, mx, top - 5, "04", "Note di rilievo")
+    y = _draw_section_title(c, mx, top - 5, "05", "Note e appunti di rilievo")
 
     for label, text in notes:
         lines = _wrap(text, "Helvetica", 8.5, pw - 2 * mx - 28)
@@ -908,7 +1304,7 @@ def _draw_notes_pages(c, model: PlanModel) -> None:
             c.showPage()
             c.setPageSize(A4)
             top = _draw_internal_header(c, model, pw, ph)
-            y = _draw_section_title(c, mx, top - 5, "04", "Note di rilievo - continua")
+            y = _draw_section_title(c, mx, top - 5, "05", "Note e appunti - continua")
 
         c.setFillColorRGB(*LIGHT)
         c.setStrokeColorRGB(*LINE)
@@ -942,6 +1338,7 @@ def export_pdf(model: PlanModel, path: Path) -> None:
     _draw_plan_page(c, model)
     _draw_room_pages(c, model)
     _draw_summary_page(c, model)
+    _draw_work_pages(c, model)
     _draw_notes_pages(c, model)
 
     append_usage_terms_page(
