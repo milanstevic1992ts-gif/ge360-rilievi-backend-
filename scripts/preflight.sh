@@ -1,30 +1,46 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-APP_DIR="${GE360_APP_DIR:-/opt/ge360/ge360-rilievi-backend}"
-ENV_FILE="${GE360_ENV_FILE:-$APP_DIR/.env}"
+ENV_FILE="${GE360_ENV_FILE:-/etc/ge360-rilievi-backend/ge360.env}"
 
-if [[ -f "$ENV_FILE" ]]; then
-  set -a
-  # shellcheck disable=SC1090
-  source "$ENV_FILE"
-  set +a
-fi
+read_env() {
+  local key="$1"
+  local default="${2:-}"
+  local value=""
 
-require="${GE360_REQUIRE_API_KEY:-true}"
+  if [[ -r "$ENV_FILE" ]]; then
+    value="$(
+      grep -E "^${key}=" "$ENV_FILE" 2>/dev/null |
+      tail -n1 |
+      cut -d= -f2- || true
+    )"
+    value="${value%$'\r'}"
+
+    if [[ "$value" =~ ^\".*\"$ ]]; then
+      value="${value:1:${#value}-2}"
+    elif [[ "$value" =~ ^\'.*\'$ ]]; then
+      value="${value:1:${#value}-2}"
+    fi
+  fi
+
+  printf '%s' "${value:-$default}"
+}
+
+require="$(read_env GE360_REQUIRE_API_KEY true)"
 case "${require,,}" in
   0|false|no|off) exit 0 ;;
 esac
 
-if [[ -n "${GE360_API_KEY:-}" ]]; then
-  exit 0
+api_key="$(read_env GE360_API_KEY '')"
+[[ -n "$api_key" ]] && exit 0
+
+data_dir="$(read_env GE360_DATA_DIR /opt/ge360/data/rilievi)"
+key_file="$(read_env GE360_API_KEY_FILE "$data_dir/.api-key")"
+
+if [[ -r "$key_file" ]]; then
+  key="$(tr -d '\r\n' < "$key_file")"
+  [[ -n "$key" ]] && exit 0
 fi
 
-data_dir="${GE360_DATA_DIR:-/opt/ge360/data/rilievi}"
-key_file="${GE360_API_KEY_FILE:-$data_dir/.api-key}"
-if [[ -r "$key_file" ]] && [[ -n "$(tr -d '\r\n' < "$key_file")" ]]; then
-  exit 0
-fi
-
-echo "GE360 SECURITY: API key required but missing. Set GE360_API_KEY or create $key_file" >&2
+echo "GE360 SECURITY: API key required but missing: $key_file" >&2
 exit 78
