@@ -130,13 +130,34 @@ class PublicEndpoint:
 def resolve_public_endpoint(settings: BridgeSettings, runner: Runner = run_command) -> PublicEndpoint:
     if settings.public_host:
         host = settings.public_host.strip().strip("[]")
+        # An explicitly configured global IPv6 endpoint is valid even when the
+        # router's IPv4 WAN is behind CGNAT. IPv4 CGNAT must not disable IPv6.
+        try:
+            configured_ip = ipaddress.ip_address(host)
+        except ValueError:
+            configured_ip = None
+
+        if isinstance(configured_ip, ipaddress.IPv6Address):
+            if configured_ip.is_global:
+                return PublicEndpoint(
+                    True,
+                    format_endpoint(host, settings.listen_port),
+                    host,
+                    "configured-ipv6",
+                    "ENDPOINT_CONFIGURED_IPV6",
+                )
+            return PublicEndpoint(
+                False, None, host, "configured-ipv6", "PUBLIC_ENDPOINT_REQUIRED",
+                "L'IPv6 configurato non è un indirizzo globale raggiungibile.",
+            )
+
         classification = classify_external_ipv4(host)
         router_external_ip, _ = upnp_external_ipv4(runner)
         router_classification = classify_external_ipv4(router_external_ip)
         if classification in {"CGNAT", "NON_PUBLIC"} or router_classification in {"CGNAT", "NON_PUBLIC"}:
             return PublicEndpoint(
                 False, None, router_external_ip or host, "configured", "REMOTE_ACCESS_UNAVAILABLE_CGNAT",
-                "La rete non consente connessioni dirette in ingresso. È necessario un IP pubblico, IPv6 raggiungibile o un relay esterno.",
+                "La rete IPv4 non consente connessioni dirette in ingresso. Usa un IPv6 globale raggiungibile o un relay esterno.",
             )
         return PublicEndpoint(True, format_endpoint(host, settings.listen_port), host, "configured", "ENDPOINT_CONFIGURED")
 
