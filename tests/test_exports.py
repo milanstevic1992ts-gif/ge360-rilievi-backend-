@@ -61,7 +61,7 @@ def test_svg_png_pdf_and_plan3d(tmp_path:Path):
     assert b'EDIL MILAN STEVIC' in pdf_bytes
     assert b'RILIEVO METRICO E PLANIMETRIA' in pdf_bytes
     assert b'Planimetria generale' in pdf_bytes
-    assert b'Schede ambiente' in pdf_bytes
+    assert b'Scheda ambiente' in pdf_bytes
     assert b'Riepilogo superfici' in pdf_bytes
     assert b"Condizioni d'uso del rilievo" in pdf_bytes
     assert b'Natura del rilievo.' in pdf_bytes
