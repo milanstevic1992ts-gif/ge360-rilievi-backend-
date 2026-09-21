@@ -3,7 +3,11 @@ set -euo pipefail
 
 APP_DIR="${GE360_APP_DIR:-/opt/ge360/ge360-rilievi-backend}"
 SERVICE_NAME="ge360-rilievi-backend.service"
-SERVICE_USER="${GE360_SERVICE_USER:-jarvis}"
+SERVICE_USER="${GE360_SERVICE_USER:-}"
+if [[ -z "$SERVICE_USER" ]] && command -v systemctl >/dev/null 2>&1; then
+  SERVICE_USER="$(systemctl show -p User --value "$SERVICE_NAME" 2>/dev/null || true)"
+fi
+SERVICE_USER="${SERVICE_USER:-jarvis}"
 GROUP_NAME="ge360-bridge"
 CONFIG_DIR="/etc/ge360/direct-bridge"
 STATE_DIR="/var/lib/ge360/direct-bridge"

@@ -1,0 +1,37 @@
+name: Build Debian package
+
+on:
+  workflow_dispatch:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  deb:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare builder
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y dpkg-dev rsync
+          bash -n scripts/build-deb.sh
+          bash -n packaging/deb/postinst
+          bash -n packaging/deb/prerm
+          bash -n packaging/deb/postrm
+
+      - name: Build .deb
+        run: bash scripts/build-deb.sh dist
+
+      - name: Inspect package
+        run: |
+          dpkg-deb --info dist/*.deb
+          dpkg-deb --contents dist/*.deb | head -80
+
+      - name: Upload .deb
+        uses: actions/upload-artifact@v4
+        with:
+          name: ge360-rilievi-backend-deb
+          path: dist/*.deb
+          if-no-files-found: error

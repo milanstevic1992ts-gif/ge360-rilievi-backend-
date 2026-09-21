@@ -1,0 +1,14 @@
+#!/bin/sh
+set -e
+
+SERVICE=ge360-rilievi-backend.service
+
+case "${1:-}" in
+  remove|deconfigure|upgrade)
+    if command -v systemctl >/dev/null 2>&1 && [ -d /run/systemd/system ]; then
+      systemctl stop "$SERVICE" >/dev/null 2>&1 || true
+    fi
+    ;;
+esac
+
+exit 0

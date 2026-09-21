@@ -8,3 +8,4 @@ htmlcov/
 *.sqlite3
 .DS_Store
 local-data/
+dist/

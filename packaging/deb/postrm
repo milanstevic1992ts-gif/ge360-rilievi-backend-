@@ -1,0 +1,19 @@
+#!/bin/sh
+set -e
+
+APP_DIR=/opt/ge360/ge360-rilievi-backend
+SERVICE=ge360-rilievi-backend.service
+
+if command -v systemctl >/dev/null 2>&1; then
+  systemctl daemon-reload >/dev/null 2>&1 || true
+fi
+
+case "${1:-}" in
+  purge)
+    rm -rf "$APP_DIR/.venv"
+    echo "GE360: application virtualenv removed."
+    echo "GE360: project data in /opt/ge360/data/rilievi and configuration in /etc/ge360-rilievi-backend were intentionally preserved."
+    ;;
+esac
+
+exit 0
