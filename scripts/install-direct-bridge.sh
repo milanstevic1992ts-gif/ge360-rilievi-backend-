@@ -176,9 +176,13 @@ ExecStart=
 ExecStart=$APP_DIR/.venv/bin/uvicorn backend.main:app --host 0.0.0.0 --port 9888
 EOF
 
+install -m 0755 "$APP_DIR/scripts/ge360-boot-verify.sh" /usr/local/sbin/ge360-boot-verify
+install -m 0644 "$APP_DIR/packaging/deb/ge360-boot-verify.service" /etc/systemd/system/ge360-boot-verify.service
+
 systemctl daemon-reload
 systemctl enable --now ge360-direct-bridge-firewall.service
 systemctl enable --now "wg-quick@${WG_IFACE}.service"
+systemctl enable ge360-boot-verify.service >/dev/null 2>&1 || true
 
 if systemctl is-active --quiet "$SERVICE_NAME"; then
   systemctl restart "$SERVICE_NAME"
