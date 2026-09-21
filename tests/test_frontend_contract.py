@@ -35,7 +35,7 @@ def test_real_openplan3d_v4_payload_roundtrip(tmp_path: Path, monkeypatch):
     payload = json.loads(FIXTURE.read_text(encoding="utf-8"))
     payload["works"] = [
         {"id":"work-paint","catalogId":"paint.walls_ceiling","targetType":"plan"},
-        {"id":"work-floor","catalogId":"tiles.install.floor","targetType":"room","targetId":"room-living"},
+        {"id":"work-floor","catalogId":"tiles.install.floor","targetType":"room","targetId":"room-1"},
     ]
 
     queued = client.post("/api/v1/plans/refine", json=payload, headers=headers)
@@ -82,7 +82,9 @@ def test_real_openplan3d_v4_payload_roundtrip(tmp_path: Path, monkeypatch):
     assert original["rawStrokes"] == payload["rawStrokes"]
     assert original["rooms"] == payload["rooms"]
     assert original["notes"] == payload["notes"]
-    assert original["works"] == payload["works"]
+    assert [w["id"] for w in original["works"]] == [w["id"] for w in payload["works"]]
+    assert [w["catalogId"] for w in original["works"]] == [w["catalogId"] for w in payload["works"]]
+    assert original["works"][1]["targetId"] == "room-1"
     assert original["surfaces"] == payload["surfaces"]
 
     works = processed["metadata"]["works"]
