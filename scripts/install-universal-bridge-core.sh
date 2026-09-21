@@ -2,6 +2,7 @@
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+INSTALL_ROOT="${GE360_BRIDGE_INSTALL_ROOT:-/opt/ge360/universal-bridge-kit}"
 GROUP_NAME="${GE360_BRIDGE_GROUP:-ge360-bridge}"
 CONFIG_DIR="${GE360_BRIDGE_CONFIG_DIR:-/etc/ge360/direct-bridge}"
 STATE_DIR="${GE360_BRIDGE_STATE_DIR:-/var/lib/ge360/direct-bridge}"
@@ -126,6 +127,33 @@ install -m 0755 "$ROOT/scripts/direct-bridge-firewall.sh" /usr/local/sbin/ge360-
 install -m 0755 "$ROOT/scripts/ge360-boot-verify.sh" /usr/local/sbin/ge360-boot-verify
 install -m 0755 "$ROOT/scripts/register-bridge-app.sh" /usr/local/sbin/ge360-bridge-register-app
 
+install -m 0755 "$ROOT/scripts/ge360-bridge-network-auto.sh" /usr/local/sbin/ge360-bridge-network-auto
+install -m 0755 "$ROOT/scripts/ge360-bridge-wizard.sh" /usr/local/sbin/ge360-bridge-wizard
+install -m 0755 "$ROOT/scripts/ge360-bridge-terminal-launcher.sh" /usr/local/bin/ge360-bridge-setup-terminal
+
+# Keep a standalone reusable copy outside every application repository.
+if [[ "$(readlink -f "$ROOT")" != "$(readlink -m "$INSTALL_ROOT")" ]]; then
+  install -d -m 0755 "$INSTALL_ROOT/scripts" "$INSTALL_ROOT/config" "$INSTALL_ROOT/packaging/desktop"
+  install -m 0755 "$ROOT/scripts/install-universal-bridge-core.sh" "$INSTALL_ROOT/scripts/install-universal-bridge-core.sh"
+  install -m 0755 "$ROOT/scripts/register-bridge-app.sh" "$INSTALL_ROOT/scripts/register-bridge-app.sh"
+  install -m 0755 "$ROOT/scripts/direct-bridge-firewall.sh" "$INSTALL_ROOT/scripts/direct-bridge-firewall.sh"
+  install -m 0755 "$ROOT/scripts/ge360-boot-verify.sh" "$INSTALL_ROOT/scripts/ge360-boot-verify.sh"
+  install -m 0755 "$ROOT/scripts/ge360-bridge-network-auto.sh" "$INSTALL_ROOT/scripts/ge360-bridge-network-auto.sh"
+  install -m 0755 "$ROOT/scripts/ge360-bridge-wizard.sh" "$INSTALL_ROOT/scripts/ge360-bridge-wizard.sh"
+  install -m 0755 "$ROOT/scripts/ge360-bridge-terminal-launcher.sh" "$INSTALL_ROOT/scripts/ge360-bridge-terminal-launcher.sh"
+  install -m 0644 "$ROOT/config/bridge.env.example" "$INSTALL_ROOT/config/bridge.env.example"
+  install -m 0644 "$ROOT/packaging/desktop/ge360-universal-bridge.desktop" "$INSTALL_ROOT/packaging/desktop/ge360-universal-bridge.desktop"
+fi
+
+cat > /usr/local/sbin/ge360-bridge-core-install <<EOF
+#!/usr/bin/env bash
+exec bash "$INSTALL_ROOT/scripts/install-universal-bridge-core.sh" "\$@"
+EOF
+chmod 0755 /usr/local/sbin/ge360-bridge-core-install
+
+install -m 0644 "$ROOT/packaging/desktop/ge360-universal-bridge.desktop" /usr/share/applications/ge360-universal-bridge.desktop
+command -v update-desktop-database >/dev/null 2>&1 && update-desktop-database /usr/share/applications || true
+
 cat > /etc/systemd/system/ge360-direct-bridge-firewall.service <<EOF
 [Unit]
 Description=GE360 Universal Direct Bridge firewall guard
@@ -170,6 +198,9 @@ echo "Interface : $WG_IFACE"
 echo "VPN server: $WG_SERVER_IP"
 echo "WireGuard : UDP $WG_PORT"
 echo "Apps dir  : $CONFIG_DIR/apps.d"
+echo "Kit       : $INSTALL_ROOT"
 echo "Public key: $(cat "$PUBLIC_KEY")"
 echo
+echo "Launcher installato: GE360 Universal Bridge (menu applicazioni)."
+echo "Wizard terminale: sudo ge360-bridge-wizard"
 echo "Register each backend with /usr/local/sbin/ge360-bridge-register-app."
