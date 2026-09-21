@@ -17,7 +17,7 @@ from backend.geometry.topology import build_topology
 from backend.geometry.validator import validate_geometry
 from backend.models import PlanPayload, PlanStatus, QualityStatus
 from backend.storage import PlanStorage
-from backend.works import resolve_works
+from backend.works import resolve_works, summarize_works
 from backend.view3d import to_plan3d
 
 
@@ -231,10 +231,13 @@ class Pipeline:
             }
             model.quality = quality
             resolved_works = resolve_works(model, payload.works)
+            work_summary = summarize_works(resolved_works)
             model.metadata["works"] = resolved_works
+            model.metadata["workSummary"] = work_summary
             totals = self.plan_totals(model)
             totals["works"] = len(resolved_works)
             totals["workItemsNeedingReview"] = sum(1 for row in resolved_works if row.get("needsReview"))
+            totals["workSummary"] = work_summary
             model.metadata["totals"] = totals
 
             self.storage.write_json_atomic(out / "processed-plan.json", model.model_dump(mode="json"))
