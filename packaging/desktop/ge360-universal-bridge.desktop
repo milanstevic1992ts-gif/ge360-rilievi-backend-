@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=GE360 Universal Bridge
+Comment=Installazione guidata e diagnostica GE360 Direct Bridge
+Exec=/usr/local/bin/ge360-bridge-setup-terminal
+Icon=network-vpn
+Terminal=false
+Categories=Network;Utility;System;
+Keywords=GE360;WireGuard;Bridge;VPN;Setup;
