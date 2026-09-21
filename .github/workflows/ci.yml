@@ -20,8 +20,8 @@ jobs:
       - run: bash scripts/smoke-http.sh
       - name: Cross backend/frontend jsdom E2E
         run: |
-          git clone --depth 1 https://github.com/milanstevic1992ts-gif/ge360-open-plan3d.git frontend
-          npm install --prefix frontend --ignore-scripts
+          git clone --depth 1 https://github.com/milanstevic1992ts-gif/ge360-open-plan3d.git frontend-e2e
+          npm install --prefix frontend-e2e --ignore-scripts
           export GE360_API_KEY=ge360-cross-contract-key
           export GE360_REQUIRE_API_KEY=true
           export GE360_AI_ENABLED=false
@@ -35,7 +35,7 @@ jobs:
             curl -fsS http://127.0.0.1:18888/healthz >/dev/null 2>&1 && break
             sleep .1
           done
-          GE360_E2E_BASE_URL=http://127.0.0.1:18888/api/v1 GE360_E2E_API_KEY="$GE360_API_KEY" node frontend/scripts/test-live-backend.mjs
+          GE360_E2E_BASE_URL=http://127.0.0.1:18888/api/v1 GE360_E2E_API_KEY="$GE360_API_KEY" node frontend-e2e/scripts/test-live-backend.mjs
       - run: bash -n scripts/install-debian.sh
       - run: bash -n scripts/setup-tailscale.sh
       - run: bash -n scripts/install-direct-bridge.sh
