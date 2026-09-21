@@ -232,3 +232,56 @@ wg0 / 10.88.0.1
       v
 GE360 Backend TCP 9888
 ```
+
+
+## 11. Persistenza dopo riavvio del server
+
+GE360 deve ripartire automaticamente senza perdere pairing o configurazioni.
+
+Servizi abilitati al boot:
+
+```bash
+sudo systemctl enable ge360-rilievi-backend
+sudo systemctl enable wg-quick@wg0
+sudo systemctl enable ge360-direct-bridge-firewall
+sudo systemctl enable ge360-boot-verify
+```
+
+Verifica:
+
+```bash
+systemctl is-enabled ge360-rilievi-backend
+systemctl is-enabled wg-quick@wg0
+systemctl is-enabled ge360-direct-bridge-firewall
+systemctl is-enabled ge360-boot-verify
+```
+
+Devono risultare `enabled`.
+
+Dopo ogni boot, `ge360-boot-verify.service` controlla che WireGuard, firewall e backend siano attivi e prova a riavviarli se necessario.
+
+Il riavvio NON deve rigenerare:
+
+- server.key / server.pub WireGuard
+- API key GE360
+- database dispositivi Direct Bridge
+- indirizzi VPN assegnati
+- configurazione bridge.env
+- configurazione backend ge360.env
+
+I dati persistenti restano in:
+
+```text
+/etc/ge360-rilievi-backend/
+/etc/ge360/direct-bridge/
+/opt/ge360/data/rilievi/
+/var/lib/ge360/direct-bridge/
+```
+
+Dopo un riavvio controllare:
+
+```bash
+sudo wg show
+ge360-rilievi-status
+curl http://127.0.0.1:9888/healthz
+```
