@@ -1,4 +1,5 @@
-const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
+const CONTROL_BUILD='1.5.3';
+const $=s=>document.querySelector(s), $=s=>Array.from(document.querySelectorAll(s));
 const state={key:localStorage.getItem('ge360ControlKey')||'',summary:null,plans:[],jobs:[],catalog:[],system:null,setupProfile:null,bridgeSettings:null,bridgeDevices:[],documentsArchive:null,configBackups:null,settingsLoaded:false,activePlan:null,activeProcessed:null,activePhotos:[],activeVersions:[],tab:'overview',blobs:new Map()};
 function headers(){return state.key?{'X-GE360-API-Key':state.key}:{}} function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function fmt(v,d=1){return Number.isFinite(Number(v))?Number(v).toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}):'—'}
@@ -43,7 +44,34 @@ async function loadSettings(){try{const [profile,bridge,devices,backups]=await P
 async function refreshBridgeSettings(){try{state.bridgeSettings=await settingsApi('/bridge/status');state.bridgeDevices=await settingsApi('/bridge/devices');renderBridgeSettings();renderSettingsDevices();settingsMessage('Stato Bridge aggiornato')}catch(e){settingsMessage(e.message,'error')}}
 async function runBridgeDiagnostics(){const out=$('#bridgeDiagnosticsOutput');out.classList.remove('hidden');out.textContent='Diagnostica in corso…';try{const d=await settingsApi('/bridge/diagnostics');out.textContent=JSON.stringify(d,null,2);settingsMessage('Diagnostica completata')}catch(e){out.textContent='ERRORE: '+e.message;settingsMessage(e.message,'error')}}
 async function restartBridgeSettings(){if(!confirm('Riavviare WireGuard / GE360 Direct Bridge?'))return;try{await settingsApi('/bridge/restart',{method:'POST'});settingsMessage('Bridge riavviato');setTimeout(refreshBridgeSettings,500)}catch(e){settingsMessage(e.message,'error')}}
-async function pairSettingsDevice(){const name=$('#settingsDeviceName').value.trim();if(!name)return settingsMessage('Inserisci un nome dispositivo','error');try{const d=await settingsApi('/bridge/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});$('#settingsPairQr').src='data:image/png;base64,'+d.pairing.qr_png_base64;$('#settingsWgConfig').value=d.pairing.wireguard_config||'';$('#settingsBridgeBackend').value=d.pairing.backend_url||'';$('#settingsPairing').classList.remove('hidden');$('#settingsDeviceName').value='';settingsMessage('Dispositivo creato · salva il QR ora');await refreshBridgeSettings()}catch(e){settingsMessage(e.message,'error')}}
+async function pairSettingsDevice(){
+  const input=$('#settingsDeviceName'),button=$('#settingsPairBtn');
+  const name=(input?.value||'').trim();
+  if(!name)return settingsMessage('Inserisci un nome dispositivo','error');
+  const oldText=button?.textContent||'COLLEGA DISPOSITIVO';
+  if(button){button.disabled=true;button.textContent='CREAZIONE QR…'}
+  settingsMessage('Creo dispositivo e QR…');
+  try{
+    const d=await settingsApi('/bridge/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})});
+    const pairing=d?.pairing||{};
+    const qr=$('#settingsPairQr'),wg=$('#settingsWgConfig'),backend=$('#settingsBridgeBackend'),box=$('#settingsPairing');
+    if(!pairing.qr_png_base64)throw new Error('Il backend non ha restituito il QR di pairing');
+    if(!qr||!wg||!backend||!box)throw new Error('Control non allineato: aggiorna gli asset della dashboard');
+    qr.src='data:image/png;base64,'+pairing.qr_png_base64;
+    wg.value=pairing.wireguard_config||'';
+    backend.value=pairing.backend_url||'';
+    box.classList.remove('hidden');
+    if(input)input.value='';
+    settingsMessage('Dispositivo creato · salva il QR ora');
+    await refreshBridgeSettings();
+  }catch(e){
+    const message='Collegamento dispositivo: '+(e?.message||e);
+    settingsMessage(message,'error');
+    toast(message);
+  }finally{
+    if(button){button.disabled=false;button.textContent=oldText}
+  }
+}
 async function revokeSettingsDevice(id){if(!confirm('Revocare questo dispositivo? Non potrà più collegarsi.'))return;try{await settingsApi('/bridge/devices/'+encodeURIComponent(id)+'/revoke',{method:'POST'});settingsMessage('Dispositivo revocato');await refreshBridgeSettings()}catch(e){settingsMessage(e.message,'error')}}
 async function rotateMasterKey(){if(!confirm('Ruotare la master API key? La chiave precedente smetterà di funzionare.'))return;try{const d=await settingsApi('/setup/api-key',{method:'POST'});state.key=d.apiKey;localStorage.setItem('ge360ControlKey',state.key);$('#settingsNewApiKey').value=d.apiKey;$('#settingsKeyBox').classList.remove('hidden');renderSettingsHealth();settingsMessage('Nuova API key attiva e salvata in Control');setTimeout(loadAll,250)}catch(e){settingsMessage(e.message,'error')}}
 async function copyText(value,button){try{await navigator.clipboard.writeText(value);const old=button.textContent;button.textContent='COPIATO ✓';setTimeout(()=>button.textContent=old,1300)}catch{settingsMessage('Impossibile copiare automaticamente','error')}}
@@ -57,5 +85,10 @@ async function loadPhoto(el,p){try{const u=await blobUrl(p.url.replace('/api/v1'
 async function reprocess(id){if(!confirm('Creare una nuova versione elaborata di questo rilievo?'))return;try{const out=await api('/plans/'+encodeURIComponent(id)+'/reprocess',{method:'POST'});toast('Rielaborazione accodata');setTimeout(loadAll,1200)}catch(e){toast(e.message)}}
 function go(view){const target=$('#view-'+view);if(!target)view='dashboard';$$('.view').forEach(v=>v.classList.remove('active'));$('#view-'+view).classList.add('active');$$('.nav-item').forEach(b=>b.classList.toggle('active',b.dataset.view===view));$('#pageTitle').textContent={dashboard:'Dashboard',plans:'Rilievi',jobs:'Elaborazioni',catalog:'Catalogo lavori',documents:'Documenti',system:'Sistema',settings:'Impostazioni'}[view]||'GE360';if(view==='settings')loadSettings();if(view==='documents')loadDocumentsArchive(false);try{const u=new URL(location.href);u.searchParams.set('view',view);history.replaceState(null,'',u)}catch{}}
 $$('.nav-item').forEach(b=>b.onclick=()=>go(b.dataset.view));$$('[data-go]').forEach(b=>b.onclick=()=>go(b.dataset.go));$('#refreshBtn').onclick=()=>{const active=$('.view.active')?.id?.replace('view-','');if(active==='settings')loadSettings();else if(active==='documents')loadDocumentsArchive(true);else loadAll()};$('#globalSearch').oninput=renderPlans;$('#catalogSearch').oninput=renderCatalog;$('#closeDrawerBtn').onclick=()=>$('#planDrawer').classList.add('hidden');$('#planDrawer').onclick=e=>{if(e.target===$('#planDrawer'))$('#planDrawer').classList.add('hidden')};$$('#drawerTabs button').forEach(b=>b.onclick=()=>setDrawerTab(b.dataset.tab));$('#connectBtn').onclick=connect;$('#apiKeyInput').onkeydown=e=>{if(e.key==='Enter')connect()};$('#changeKeyBtn').onclick=()=>showAuth();$('#localSetupBtn').onclick=openLocalSettings;$('#settingsRefreshBtn').onclick=loadSettings;$('#bridgeSettingsRefreshBtn').onclick=refreshBridgeSettings;$('#bridgeSettingsDiagnosticsBtn').onclick=runBridgeDiagnostics;$('#bridgeSettingsRestartBtn').onclick=restartBridgeSettings;$('#settingsPairBtn').onclick=pairSettingsDevice;$('#settingsRotateKeyBtn').onclick=rotateMasterKey;$('#syncDocumentsArchiveBtn').onclick=()=>loadDocumentsArchive(true);$('#copyRestoreCommandBtn').onclick=()=>copyText($('#configRestoreCommand').textContent.trim(),$('#copyRestoreCommandBtn'));$$('[data-settings-copy]').forEach(btn=>btn.onclick=()=>copyText($('#'+btn.dataset.settingsCopy).value,btn));$$('[data-copy-command]').forEach(btn=>btn.onclick=()=>copyText(btn.closest('.command-row').querySelector('code').textContent.trim(),btn));
+const htmlBuild=document.querySelector('meta[name="ge360-control-build"]')?.content||'';
+if(htmlBuild&&htmlBuild!==CONTROL_BUILD){
+  console.error('GE360 Control asset mismatch', {htmlBuild,jsBuild:CONTROL_BUILD});
+  settingsMessage('Control non allineato: aggiorna la pagina o riesegui ge360-rilievi-update','error');
+}
 const requestedView=new URLSearchParams(location.search).get('view')||'dashboard';
 if(state.key){api('/health').then(()=>{hideAuth();go(requestedView);loadAll()}).catch(()=>showAuth('Inserisci la chiave API'))}else if(requestedView==='settings'||new URLSearchParams(location.search).get('bootstrap')==='1'){openLocalSettings()}else showAuth();
