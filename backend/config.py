@@ -25,6 +25,9 @@ class Settings:
     api_key: str
     data_dir: Path
     db_path: Path
+    documents_dir: Path
+    config_backup_dir: Path
+    config_backup_keep: int
     host: str
     port: int
     default_wall_thickness_mm: float
@@ -61,6 +64,9 @@ def get_settings() -> Settings:
         api_key=os.getenv("GE360_API_KEY", os.getenv("GE360_RILIEVO_API_KEY", "")),
         data_dir=data_dir,
         db_path=Path(os.getenv("GE360_DB_PATH", str(data_dir / "ge360-rilievi.sqlite3"))),
+        documents_dir=Path(os.getenv("GE360_DOCUMENTS_DIR", "/opt/ge360/Documenti/Rilievi")),
+        config_backup_dir=Path(os.getenv("GE360_CONFIG_BACKUP_DIR", "/opt/ge360/Backup/Configurazione")),
+        config_backup_keep=max(10, int(os.getenv("GE360_CONFIG_BACKUP_KEEP", "10"))),
         host=os.getenv("GE360_HOST", "127.0.0.1"),
         port=int(os.getenv("GE360_PORT", "9888")),
         default_wall_thickness_mm=float(os.getenv("GE360_DEFAULT_WALL_THICKNESS_MM", "120")),
