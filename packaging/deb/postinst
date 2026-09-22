@@ -64,8 +64,16 @@ chmod 0755 "$APP_DIR/scripts/preflight.sh" 2>/dev/null || true
 chmod 0755 "$APP_DIR/scripts/install-direct-bridge.sh" 2>/dev/null || true
 chmod 0755 "$APP_DIR/scripts/ge360-config-backup.sh" 2>/dev/null || true
 chmod 0755 "$APP_DIR/scripts/ge360-config-restore.sh" 2>/dev/null || true
+chmod 0755 "$APP_DIR/scripts/update-debian.sh" 2>/dev/null || true
+chmod 0755 "$APP_DIR/scripts/verify-control-assets.py" 2>/dev/null || true
 install -m 0755 "$APP_DIR/scripts/ge360-config-backup.sh" /usr/local/sbin/ge360-config-backup || true
 install -m 0755 "$APP_DIR/scripts/ge360-config-restore.sh" /usr/local/sbin/ge360-config-restore || true
+install -m 0755 "$APP_DIR/scripts/update-debian.sh" /usr/local/sbin/ge360-rilievi-update || true
+
+if ! python3 "$APP_DIR/scripts/verify-control-assets.py" "$APP_DIR"; then
+  echo "GE360 ERROR: Control assets are inconsistent; refusing to start a mixed dashboard." >&2
+  exit 1
+fi
 
 # Recreate only if the venv is missing/broken; otherwise preserve it across upgrades.
 if [ ! -x "$APP_DIR/.venv/bin/python" ]; then
@@ -167,6 +175,7 @@ echo "Control panel : http://127.0.0.1:9888/control/"
 echo "Settings      : http://127.0.0.1:9888/control/?view=settings"
 echo "Status        : ge360-rilievi-status"
 echo "Diagnostics   : sudo ge360-rilievi-diagnose"
+echo "Update        : sudo ge360-rilievi-update"
 echo "API key file  : $KEY_FILE"
 echo "Configuration : $ENV_FILE"
 echo "Documents     : $DOCUMENTS_DIR"
