@@ -23,7 +23,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=full
 ProtectHome=true
-ReadWritePaths=/opt/ge360/data/rilievi /var/lib/ge360
+ReadWritePaths=/opt/ge360/data/rilievi /opt/ge360/Documenti/Rilievi /var/lib/ge360
 UMask=0027
 
 [Install]
