@@ -3,6 +3,8 @@ set -u
 
 APP_DIR=/opt/ge360/ge360-rilievi-backend
 DATA_DIR=/opt/ge360/data/rilievi
+DOCUMENTS_DIR=/opt/ge360/Documenti/Rilievi
+BACKUP_DIR=/opt/ge360/Backup/Configurazione
 CONFIG_DIR=/etc/ge360-rilievi-backend
 ENV_FILE=$CONFIG_DIR/ge360.env
 SERVICE=ge360-rilievi-backend.service
@@ -24,6 +26,8 @@ fi
 
 install -d -m 0755 /opt/ge360 || exit 1
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$DATA_DIR" || exit 1
+install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" "$DOCUMENTS_DIR" || exit 1
+install -d -m 0750 -o root -g "$SERVICE_GROUP" "$BACKUP_DIR" || exit 1
 install -d -m 0750 -o root -g "$SERVICE_GROUP" "$CONFIG_DIR" || exit 1
 install -d -m 0750 -o "$SERVICE_USER" -g "$SERVICE_GROUP" /var/lib/ge360 || true
 
@@ -46,9 +50,22 @@ fi
 if ! grep -q '^GE360_API_KEY_FILE=' "$ENV_FILE"; then
   printf 'GE360_API_KEY_FILE=%s/.api-key\n' "$DATA_DIR" >> "$ENV_FILE"
 fi
+if ! grep -q '^GE360_DOCUMENTS_DIR=' "$ENV_FILE"; then
+  printf 'GE360_DOCUMENTS_DIR=%s\n' "$DOCUMENTS_DIR" >> "$ENV_FILE"
+fi
+if ! grep -q '^GE360_CONFIG_BACKUP_DIR=' "$ENV_FILE"; then
+  printf 'GE360_CONFIG_BACKUP_DIR=%s\n' "$BACKUP_DIR" >> "$ENV_FILE"
+fi
+if ! grep -q '^GE360_CONFIG_BACKUP_KEEP=' "$ENV_FILE"; then
+  printf 'GE360_CONFIG_BACKUP_KEEP=10\n' >> "$ENV_FILE"
+fi
 
 chmod 0755 "$APP_DIR/scripts/preflight.sh" 2>/dev/null || true
 chmod 0755 "$APP_DIR/scripts/install-direct-bridge.sh" 2>/dev/null || true
+chmod 0755 "$APP_DIR/scripts/ge360-config-backup.sh" 2>/dev/null || true
+chmod 0755 "$APP_DIR/scripts/ge360-config-restore.sh" 2>/dev/null || true
+install -m 0755 "$APP_DIR/scripts/ge360-config-backup.sh" /usr/local/sbin/ge360-config-backup || true
+install -m 0755 "$APP_DIR/scripts/ge360-config-restore.sh" /usr/local/sbin/ge360-config-restore || true
 
 # Recreate only if the venv is missing/broken; otherwise preserve it across upgrades.
 if [ ! -x "$APP_DIR/.venv/bin/python" ]; then
@@ -102,6 +119,12 @@ find "$APP_DIR/.venv/bin" -type f -exec chmod g+rx {} + 2>/dev/null || true
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
+  if [ -f "$APP_DIR/packaging/deb/ge360-config-backup.service" ] && [ -f "$APP_DIR/packaging/deb/ge360-config-backup.timer" ]; then
+    install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.service" /etc/systemd/system/ge360-config-backup.service || true
+    install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.timer" /etc/systemd/system/ge360-config-backup.timer || true
+    systemctl daemon-reload || true
+    systemctl enable --now ge360-config-backup.timer >/dev/null 2>&1 || true
+  fi
   if systemctl list-unit-files ollama.service >/dev/null 2>&1; then
     systemctl enable ollama.service >/dev/null 2>&1 || true
   fi
@@ -133,10 +156,13 @@ fi
 echo
 echo "GE360 Rilievi Backend installed."
 echo "Control panel : http://127.0.0.1:9888/control/"
-echo "Setup         : http://127.0.0.1:9888/setup/"
+echo "Settings      : http://127.0.0.1:9888/control/?view=settings"
 echo "Status        : ge360-rilievi-status"
 echo "Diagnostics   : sudo ge360-rilievi-diagnose"
 echo "API key file  : $KEY_FILE"
 echo "Configuration : $ENV_FILE"
+echo "Documents     : $DOCUMENTS_DIR"
+echo "Config backup : $BACKUP_DIR (10 copie giornaliere)"
+echo "Restore       : sudo ge360-config-restore latest"
 echo "Direct Bridge : sudo GE360_SERVICE_USER=ge360 bash $APP_DIR/scripts/install-direct-bridge.sh"
 exit 0
