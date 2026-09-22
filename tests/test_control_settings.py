@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 
@@ -22,6 +23,16 @@ def test_control_contains_integrated_settings_ui():
     assert "settingsApi('/bridge/restart'" in js
     assert "settingsApi('/setup/api-key'" in js
     assert "localStorage.setItem('ge360ControlKey',state.key)" in js
+    assert "$('#settingsPairBtn').onclick=pairSettingsDevice" in js
+    assert "qr_png_base64" in js
+    assert "CREAZIONE QR" in js
+
+    html_build = re.search(r'<meta name="ge360-control-build" content="([^"]+)"', html)
+    js_build = re.search(r"const CONTROL_BUILD='([^']+)'", js)
+    assert html_build and js_build
+    assert html_build.group(1) == js_build.group(1)
+    assert f"/control/control.js?v={html_build.group(1)}" in html
+    assert f"/control/control.css?v={html_build.group(1)}" in html
 
 
 def test_legacy_setup_routes_to_control_settings():
