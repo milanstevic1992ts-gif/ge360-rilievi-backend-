@@ -163,17 +163,34 @@ def resolve_public_endpoint(settings: BridgeSettings, runner: Runner = run_comma
 
     external_ip, _ = upnp_external_ipv4(runner)
     classification = classify_external_ipv4(external_ip)
+
+    # CGNAT/non-public IPv4 does not make the host unreachable when a
+    # globally routable IPv6 is available. Try a usable endpoint before
+    # declaring remote access unavailable.
+    if classification == "PUBLIC" and external_ip:
+        return PublicEndpoint(
+            True,
+            format_endpoint(external_ip, settings.listen_port),
+            external_ip,
+            "upnp",
+            "PUBLIC_IPV4_DETECTED",
+        )
+
+    ipv6 = global_ipv6_addresses(runner)
+    if ipv6:
+        return PublicEndpoint(
+            True,
+            format_endpoint(ipv6[0], settings.listen_port),
+            ipv6[0],
+            "ipv6",
+            "PUBLIC_IPV6_DETECTED",
+        )
+
     if classification in {"CGNAT", "NON_PUBLIC"}:
         return PublicEndpoint(
             False, None, external_ip, "upnp", "REMOTE_ACCESS_UNAVAILABLE_CGNAT",
             "La rete non consente connessioni dirette in ingresso. È necessario un IP pubblico, IPv6 raggiungibile o un relay esterno.",
         )
-    if classification == "PUBLIC" and external_ip:
-        return PublicEndpoint(True, format_endpoint(external_ip, settings.listen_port), external_ip, "upnp", "PUBLIC_IPV4_DETECTED")
-
-    ipv6 = global_ipv6_addresses(runner)
-    if ipv6:
-        return PublicEndpoint(True, format_endpoint(ipv6[0], settings.listen_port), ipv6[0], "ipv6", "PUBLIC_IPV6_DETECTED")
 
     return PublicEndpoint(
         False, None, None, "unknown", "PUBLIC_ENDPOINT_REQUIRED",
