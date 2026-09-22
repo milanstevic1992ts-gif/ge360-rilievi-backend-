@@ -20,11 +20,13 @@ fi
 
 mkdir -p "$APP_DIR" "$DATA_DIR" "$DOCUMENTS_DIR" "$BACKUP_DIR"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+"$PYTHON_BIN" "$SCRIPT_DIR/scripts/verify-control-assets.py" "$SCRIPT_DIR"
 if [[ "$SCRIPT_DIR" != "$APP_DIR" ]]; then
   rsync -a --delete --exclude '.git' --exclude '.env' --exclude '.venv' "$SCRIPT_DIR/" "$APP_DIR/"
 fi
 
 cd "$APP_DIR"
+"$PYTHON_BIN" "$APP_DIR/scripts/verify-control-assets.py" "$APP_DIR"
 if [[ ! -d .venv ]]; then
   "$PYTHON_BIN" -m venv .venv
 fi
@@ -65,6 +67,7 @@ chmod +x "$APP_DIR/scripts/preflight.sh"
 
 install -m 0755 "$APP_DIR/scripts/ge360-config-backup.sh" /usr/local/sbin/ge360-config-backup
 install -m 0755 "$APP_DIR/scripts/ge360-config-restore.sh" /usr/local/sbin/ge360-config-restore
+install -m 0755 "$APP_DIR/scripts/update-debian.sh" /usr/local/sbin/ge360-rilievi-update
 install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.service" /etc/systemd/system/ge360-config-backup.service
 install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.timer" /etc/systemd/system/ge360-config-backup.timer
 
@@ -86,9 +89,15 @@ systemctl daemon-reload
 systemctl enable --now ge360-config-backup.timer
 systemctl start ge360-config-backup.service || true
 
+if [[ -f /etc/ge360/direct-bridge/bridge.env ]]; then
+  echo "Existing GE360 Direct Bridge detected; refreshing permissions and systemd integration."
+  GE360_APP_DIR="$APP_DIR" GE360_SERVICE_USER="$SERVICE_USER" bash "$APP_DIR/scripts/install-direct-bridge.sh"
+fi
+
 echo "Install complete. Review $APP_DIR/.env, then run:"
 echo "  sudo systemctl enable --now $SERVICE_NAME"
 echo "  sudo systemctl status $SERVICE_NAME"
+echo "Future repository updates: sudo ge360-rilievi-update"
 echo
 echo "For GE360 DIRECT BRIDGE (WireGuard):"
 echo "  sudo bash $APP_DIR/scripts/install-direct-bridge.sh"
