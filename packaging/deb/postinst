@@ -137,6 +137,7 @@ if command -v systemctl >/dev/null 2>&1; then
   if [ -d /run/systemd/system ]; then
     if systemctl restart "$SERVICE"; then
       echo "GE360: service started successfully."
+      systemctl start ge360-config-backup.service >/dev/null 2>&1 || fail_soft "initial configuration backup failed"
     else
       echo
       echo "GE360 WARNING: package installed, but service did not start."
