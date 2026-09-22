@@ -3,6 +3,8 @@ set -euo pipefail
 
 APP_DIR="${GE360_APP_DIR:-/opt/ge360/ge360-rilievi-backend}"
 DATA_DIR="${GE360_DATA_DIR:-/opt/ge360/data/rilievi}"
+DOCUMENTS_DIR="${GE360_DOCUMENTS_DIR:-/opt/ge360/Documenti/Rilievi}"
+BACKUP_DIR="${GE360_CONFIG_BACKUP_DIR:-/opt/ge360/Backup/Configurazione}"
 SERVICE_NAME="ge360-rilievi-backend.service"
 PYTHON_BIN="${PYTHON_BIN:-python3}"
 
@@ -16,7 +18,7 @@ if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
   exit 1
 fi
 
-mkdir -p "$APP_DIR" "$DATA_DIR"
+mkdir -p "$APP_DIR" "$DATA_DIR" "$DOCUMENTS_DIR" "$BACKUP_DIR"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 if [[ "$SCRIPT_DIR" != "$APP_DIR" ]]; then
   rsync -a --delete --exclude '.git' --exclude '.env' --exclude '.venv' "$SCRIPT_DIR/" "$APP_DIR/"
@@ -41,7 +43,7 @@ SERVICE_USER="${GE360_SERVICE_USER:-jarvis}"
 if ! id "$SERVICE_USER" >/dev/null 2>&1; then
   SERVICE_USER="${SUDO_USER:-root}"
 fi
-chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR" || true
+chown -R "$SERVICE_USER:$SERVICE_USER" "$DATA_DIR" "$DOCUMENTS_DIR" || true
 
 KEY_FILE="$DATA_DIR/.api-key"
 if [[ ! -s "$KEY_FILE" ]] && ! grep -Eq '^GE360_API_KEY=.{16,}$' .env; then
@@ -61,6 +63,11 @@ PY
 fi
 chmod +x "$APP_DIR/scripts/preflight.sh"
 
+install -m 0755 "$APP_DIR/scripts/ge360-config-backup.sh" /usr/local/sbin/ge360-config-backup
+install -m 0755 "$APP_DIR/scripts/ge360-config-restore.sh" /usr/local/sbin/ge360-config-restore
+install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.service" /etc/systemd/system/ge360-config-backup.service
+install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.timer" /etc/systemd/system/ge360-config-backup.timer
+
 TARGET_SERVICE="/etc/systemd/system/$SERVICE_NAME"
 if [[ -e "$TARGET_SERVICE" ]]; then
   echo "Existing $TARGET_SERVICE preserved. Review deploy/$SERVICE_NAME manually if an update is needed."
@@ -69,6 +76,8 @@ else
   systemctl daemon-reload
   echo "Installed systemd unit: $TARGET_SERVICE"
 fi
+systemctl daemon-reload
+systemctl enable --now ge360-config-backup.timer
 
 echo "Install complete. Review $APP_DIR/.env, then run:"
 echo "  sudo systemctl enable --now $SERVICE_NAME"
@@ -77,7 +86,11 @@ echo
 echo "For GE360 DIRECT BRIDGE (WireGuard):"
 echo "  sudo bash $APP_DIR/scripts/install-direct-bridge.sh"
 echo "Then open locally:"
-echo "  http://127.0.0.1:9888/setup/"
+echo "  http://127.0.0.1:9888/control/?view=settings"
 echo
 echo "Legacy/optional Tailscale setup remains available:"
 echo "  sudo bash $APP_DIR/scripts/setup-tailscale.sh"
+
+echo "Documents archive: $DOCUMENTS_DIR"
+echo "Configuration backups: $BACKUP_DIR (10 daily copies)"
+echo "Restore latest: sudo ge360-config-restore latest"
