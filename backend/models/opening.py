@@ -16,3 +16,15 @@ class OpeningModel(BaseModel):
     center: PointMM
     heightSource: str = "DEFAULT"
     sillHeightSource: str = "DEFAULT"
+    # Metadati tecnici dell'apertura, mantenuti dal frontend fino agli export.
+    doorKind: Literal["internal", "double", "sliding", "armored", "armored-double"] | None = None
+    windowKind: Literal["single", "double", "triple", "sliding", "balcony", "balcony-double"] | None = None
+    category: str | None = None
+    leaves: int = 1
+    sliding: bool = False
+    armored: bool = False
+    balconyDoor: bool = False
+    hingeEnd: Literal["a", "b"] | None = None
+    swingDirection: Literal["inward", "outward"] | None = None
+    swingSide: int | None = None
+    slideTo: Literal["a", "b"] | None = None
