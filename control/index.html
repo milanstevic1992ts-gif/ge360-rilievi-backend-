@@ -80,7 +80,15 @@
 
     <section id="view-documents" class="view">
       <div class="panel">
-        <div class="panel-head"><div><span class="eyebrow">OUTPUT</span><h2>Documenti recenti</h2></div></div>
+        <div class="panel-head">
+          <div><span class="eyebrow">ARCHIVIO LOCALE DEBIAN</span><h2>Documenti rilievi</h2><p id="documentsArchivePath" class="settings-lead">—</p></div>
+          <button id="syncDocumentsArchiveBtn" class="small-btn">SINCRONIZZA</button>
+        </div>
+        <div id="documentsArchiveSummary" class="settings-health"></div>
+        <div id="documentsArchiveGrid" class="documents-archive-grid"></div>
+      </div>
+      <div class="panel">
+        <div class="panel-head"><div><span class="eyebrow">DOWNLOAD</span><h2>Documenti correnti</h2></div></div>
         <div id="documentsGrid" class="documents-grid"></div>
       </div>
     </section>
@@ -155,6 +163,16 @@
               <textarea id="settingsNewApiKey" class="settings-textarea" readonly rows="3"></textarea>
               <button class="small-btn" data-settings-copy="settingsNewApiKey">COPIA API KEY</button>
             </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">BACKUP</span><h3>Configurazione GE360</h3></div>
+              <span id="configBackupBadge" class="settings-badge">—</span>
+            </div>
+            <div id="configBackupDetails" class="settings-kv"></div>
+            <div class="settings-copy">Uno snapshot al giorno. Vengono conservate almeno 10 copie; la più vecchia viene eliminata automaticamente.</div>
+            <div class="command-row"><code id="configRestoreCommand">sudo ge360-config-restore latest</code><button id="copyRestoreCommandBtn" class="small-btn">COPIA</button></div>
           </section>
 
           <section class="settings-card">
