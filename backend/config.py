@@ -60,12 +60,18 @@ class Settings:
 
 def get_settings() -> Settings:
     data_dir = Path(os.getenv("GE360_DATA_DIR", "/opt/ge360/data/rilievi"))
+    if data_dir.name == "rilievi" and data_dir.parent.name == "data":
+        ge360_root = data_dir.parent.parent
+    else:
+        ge360_root = data_dir.parent
+    documents_default = ge360_root / "Documenti" / "Rilievi"
+    backup_default = ge360_root / "Backup" / "Configurazione"
     return Settings(
         api_key=os.getenv("GE360_API_KEY", os.getenv("GE360_RILIEVO_API_KEY", "")),
         data_dir=data_dir,
         db_path=Path(os.getenv("GE360_DB_PATH", str(data_dir / "ge360-rilievi.sqlite3"))),
-        documents_dir=Path(os.getenv("GE360_DOCUMENTS_DIR", "/opt/ge360/Documenti/Rilievi")),
-        config_backup_dir=Path(os.getenv("GE360_CONFIG_BACKUP_DIR", "/opt/ge360/Backup/Configurazione")),
+        documents_dir=Path(os.getenv("GE360_DOCUMENTS_DIR", str(documents_default))),
+        config_backup_dir=Path(os.getenv("GE360_CONFIG_BACKUP_DIR", str(backup_default))),
         config_backup_keep=max(10, int(os.getenv("GE360_CONFIG_BACKUP_KEEP", "10"))),
         host=os.getenv("GE360_HOST", "127.0.0.1"),
         port=int(os.getenv("GE360_PORT", "9888")),
