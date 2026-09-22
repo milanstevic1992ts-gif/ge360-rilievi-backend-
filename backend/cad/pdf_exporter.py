@@ -843,9 +843,6 @@ def _draw_plan_page(c, model: PlanModel) -> None:
     c.drawString(mx + 95, legend_y, "Misura stimata/calcolata*")
     c.setStrokeColorRGB(*ORANGE)
     c.line(mx + 95, legend_y - 5, mx + 119, legend_y - 5)
-    c.setFillColorRGB(*MUTED)
-    c.setFont("Helvetica", 6.8)
-    c.drawString(mx + 245, legend_y, "B = blindata · PF = portafinestra")
 
     _draw_scale_bar(c, mx, 61, scale)
 
