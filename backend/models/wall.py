@@ -1,5 +1,5 @@
 from __future__ import annotations
-from typing import Any
+from typing import Any, Literal
 from pydantic import BaseModel, Field
 from .node import PointMM
 
@@ -30,6 +30,9 @@ class WallModel(BaseModel):
     lengthSource: str = "MEASURED"
     resolvedBy: str | None = None
     usedLengthMm: float | None = None
+    # Stato costruttivo proveniente dal rilievo frontend.
+    constructionState: Literal["existing", "demolish", "new", "close-opening", "new-opening"] = "existing"
+    constructionThicknessMm: float | None = None
 
     @property
     def lengthMm(self) -> float:
