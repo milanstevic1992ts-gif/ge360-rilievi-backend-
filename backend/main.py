@@ -5,6 +5,7 @@ import logging
 import secrets
 import shutil
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 import tomllib
 
@@ -16,6 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, ConfigDict, Field
 
 from backend.agent.notes import rewrite_note
+from backend.archive import PlanDocumentArchive
 from backend.agent.ollama import OllamaClient
 from backend.bridge import BridgeSettings, BridgeUnavailable, DirectBridgeManager
 from backend.bridge.schemas import CreateBridgeDeviceRequest
@@ -47,7 +49,8 @@ if settings.require_api_key and not _runtime_api_key:
     )
 storage = PlanStorage(settings.data_dir)
 db = Database(settings.db_path)
-pipeline = Pipeline(settings, storage, db)
+archive = PlanDocumentArchive(settings.documents_dir, storage, db)
+pipeline = Pipeline(settings, storage, db, archive=archive)
 jobs = JobManager(pipeline, max_workers=settings.job_workers)
 _bridge_manager: DirectBridgeManager | None = None
 
@@ -218,6 +221,10 @@ def _current_file_links(plan_id: str) -> dict[str, str | None]:
 def _queue_plan(plan_id: str) -> dict:
     row = _record_or_404(plan_id)
     submission = jobs.submit(plan_id)
+    try:
+        archive.record_event(plan_id, "RIELABORAZIONE RICHIESTA", f"job {submission['jobId']}")
+    except OSError:
+        pass
     job_id = submission["jobId"]
     return {
         "success": True,
@@ -348,6 +355,9 @@ def control_status():
         "backend": {"ok": True, "version": app.version, "host": settings.host, "port": settings.port},
         "storage": {
             "path": str(settings.data_dir),
+            "documentsPath": str(settings.documents_dir),
+            "configBackupPath": str(settings.config_backup_dir),
+            "configBackupKeep": settings.config_backup_keep,
             "totalBytes": usage.total,
             "usedBytes": usage.used,
             "freeBytes": usage.free,
@@ -356,6 +366,44 @@ def control_status():
         "bridge": bridge,
         "apiKeyRequired": bool(read_runtime_api_key(settings)) or settings.require_api_key,
         "jobWorkers": settings.job_workers,
+    }
+
+
+@app.get("/api/v1/control/documents-archive", dependencies=[Depends(require_api_key)])
+def control_documents_archive(sync: bool = True):
+    rows = archive.list_archives(sync=sync)
+    return {
+        "root": str(settings.documents_dir),
+        "count": len(rows),
+        "plans": rows,
+    }
+
+
+@app.post("/api/v1/control/documents-archive/sync", dependencies=[Depends(require_api_key)])
+def control_documents_archive_sync():
+    rows = archive.sync_all()
+    return {"ok": True, "root": str(settings.documents_dir), "count": len(rows), "plans": rows}
+
+
+@app.get("/api/v1/control/config-backups", dependencies=[Depends(require_api_key)])
+def control_config_backups():
+    root = settings.config_backup_dir
+    rows = []
+    if root.is_dir():
+        for path in sorted(root.glob("ge360-config-*.tar.gz"), key=lambda p: p.stat().st_mtime, reverse=True):
+            st = path.stat()
+            rows.append({
+                "name": path.name,
+                "createdAt": datetime.fromtimestamp(st.st_mtime, tz=timezone.utc).isoformat(),
+                "sizeBytes": st.st_size,
+            })
+    return {
+        "root": str(root),
+        "keep": settings.config_backup_keep,
+        "count": len(rows),
+        "backups": rows,
+        "schedule": "daily",
+        "restoreCommand": "sudo ge360-config-restore latest",
     }
 
 
@@ -510,6 +558,11 @@ async def upload_plan_photo(
         path=str(path),
         size_bytes=len(data),
     )
+    try:
+        archive.record_event(plan_id, "FOTO AGGIUNTA", row.get("filename") or media_id)
+        archive.sync_plan(plan_id)
+    except OSError:
+        pass
     return {"ok": True, "photo": _public_media(row)}
 
 
@@ -543,6 +596,11 @@ def delete_plan_photo(plan_id: str, media_id: str):
             Path(removed["path"]).unlink(missing_ok=True)
         except OSError:
             pass
+    try:
+        archive.record_event(plan_id, "FOTO ELIMINATA", row.get("filename") or media_id)
+        archive.sync_plan(plan_id)
+    except OSError:
+        pass
     return {"ok": True}
 
 
