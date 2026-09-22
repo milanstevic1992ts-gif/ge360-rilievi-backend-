@@ -607,6 +607,7 @@ def plan_status(plan_id: str):
     return {
         "success": True,
         "planId": row["plan_id"],
+        "technicalSchema": current_manifest.get("technicalSchema") or "ge360-technical-plan-v1",
         "name": row["name"],
         "status": row["status"],
         "currentVersion": row["current_version"],
@@ -674,6 +675,7 @@ def versions(plan_id: str):
         rows.append(
             {
                 "version": int(path.name),
+                "technicalSchema": manifest.get("technicalSchema") or "ge360-technical-plan-v1",
                 "status": manifest.get("status", "UNKNOWN"),
                 "createdAt": manifest.get("createdAt"),
                 "completedAt": manifest.get("completedAt"),
