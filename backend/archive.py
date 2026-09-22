@@ -210,6 +210,13 @@ class PlanDocumentArchive:
                     self._copy_if_changed(pdf, pdf_dir / f"Rilievo_V{vno:03d}.pdf")
                     pdf_count += 1
 
+        first_preview = source / "versions" / "001" / "preview.png"
+        if first_preview.is_file():
+            self._copy_if_changed(first_preview, folder / "Schizzo_originale.png")
+        latest_preview = source / "current" / "preview.png"
+        if latest_preview.is_file():
+            self._copy_if_changed(latest_preview, folder / "Schizzo_ultimo.png")
+
         current_pdf = source / "current" / "plan.pdf"
         if current_pdf.is_file():
             self._copy_if_changed(current_pdf, pdf_dir / "ULTIMO.pdf")
@@ -222,7 +229,8 @@ class PlanDocumentArchive:
             if not src.is_file():
                 continue
             stamp = str(row.get("created_at") or "")[:10].replace("-", "")
-            filename = _safe_file(row.get("filename") or src.name, src.stem) + src.suffix.lower()
+            original_name = Path(row.get("filename") or src.name)
+            filename = _safe_file(original_name.stem or src.stem, src.stem) + src.suffix.lower()
             target = photos_dir / f"{stamp or 'foto'}__{str(row.get('media_id') or '')[:8]}__{filename}"
             self._copy_if_changed(src, target)
 
