@@ -24,6 +24,11 @@ LIGHT = (243 / 255, 246 / 255, 248 / 255)
 LINE = (217 / 255, 222 / 255, 227 / 255)
 WHITE = (1, 1, 1)
 MUTED = (0.40, 0.44, 0.50)
+RED = (0.86, 0.15, 0.15)
+GREEN = (0.09, 0.64, 0.29)
+PURPLE = (0.49, 0.23, 0.93)
+ARMOR = (0.60, 0.20, 0.07)
+CYAN = (0.03, 0.57, 0.70)
 
 BRAND_NAME = os.getenv("GE360_BRAND_NAME", "EDIL MILAN STEVIC")
 BRAND_SUBTITLE = os.getenv("GE360_BRAND_SUBTITLE", "Restauri & Costruzioni - Trieste e provincia")
@@ -466,36 +471,163 @@ def _dimension_wall(c, pt, wall, scale: float, center_xy: tuple[float, float]) -
     return estimated
 
 
+def _opening_type_label(opening) -> str:
+    if opening.type == "door":
+        labels = {
+            "internal": "Porta interna",
+            "double": "Porta doppia",
+            "sliding": "Porta scorrevole",
+            "armored": "Porta blindata",
+            "armored-double": "Blindata doppia",
+        }
+        return labels.get(getattr(opening, "doorKind", None), "Porta")
+    labels = {
+        "single": "Finestra singola",
+        "double": "Finestra doppia",
+        "triple": "Finestra tripla",
+        "sliding": "Finestra scorrevole",
+        "balcony": "Portafinestra",
+        "balcony-double": "Portafinestra doppia",
+    }
+    return labels.get(getattr(opening, "windowKind", None), "Finestra")
+
+
+def _draw_pdf_arrow(c, x0: float, y0: float, x1: float, y1: float) -> None:
+    dx, dy = x1 - x0, y1 - y0
+    length = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / length, dy / length
+    nx, ny = -uy, ux
+    c.line(x0, y0, x1, y1)
+    c.line(x1, y1, x1 - ux * 5 + nx * 3, y1 - uy * 5 + ny * 3)
+    c.line(x1, y1, x1 - ux * 5 - nx * 3, y1 - uy * 5 - ny * 3)
+
+
 def _draw_opening(c, pt, opening, wall, scale: float) -> None:
     ux, uy, _ = wall_unit(wall)
     nx, ny = -uy, ux
     p1 = point_along(wall, opening.centerFromStartMm - opening.widthMm / 2)
     p2 = point_along(wall, opening.centerFromStartMm + opening.widthMm / 2)
 
-    # Clear the wall where the opening sits.
+    # Clear the wall where the opening sits: same convention as the clean frontend plan.
     c.setStrokeColorRGB(*WHITE)
-    c.setLineWidth(max(3.0, min(10.0, (wall.thicknessMm + 30) * scale)))
+    c.setLineWidth(max(3.0, min(11.0, (wall.thicknessMm + 35) * scale)))
+    c.setDash()
     c.line(*pt(*p1), *pt(*p2))
 
-    c.setStrokeColorRGB(*CHARCOAL)
-    c.setLineWidth(1.1)
     a = pt(*p1)
     b = pt(*p2)
+    center = ((a[0] + b[0]) / 2, (a[1] + b[1]) / 2)
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    line_len = math.hypot(dx, dy) or 1.0
+    sux, suy = dx / line_len, dy / line_len
+    snx, sny = -suy, sux
+
+    # Jambs.
+    c.setStrokeColorRGB(*CHARCOAL)
+    c.setLineWidth(1.1)
+    c.line(a[0] + snx * 4, a[1] + sny * 4, a[0] - snx * 4, a[1] - sny * 4)
+    c.line(b[0] + snx * 4, b[1] + sny * 4, b[0] - snx * 4, b[1] - sny * 4)
 
     if opening.type == "door":
-        # Door leaf plus a light opening arc.
-        radius = max(8.0, min(55.0, opening.widthMm * scale))
-        hinge = a
-        angle = math.degrees(math.atan2(uy, ux))
-        leaf_angle = math.radians(angle + 90)
-        leaf_end = (hinge[0] + math.cos(leaf_angle) * radius, hinge[1] + math.sin(leaf_angle) * radius)
-        c.line(hinge[0], hinge[1], leaf_end[0], leaf_end[1])
-        c.setLineWidth(0.7)
-        c.arc(hinge[0] - radius, hinge[1] - radius, hinge[0] + radius, hinge[1] + radius, angle, 90)
+        kind = getattr(opening, "doorKind", None) or "internal"
+        armored = bool(getattr(opening, "armored", False) or kind in {"armored", "armored-double"})
+        sliding = bool(getattr(opening, "sliding", False) or kind == "sliding")
+        leaves = max(1, int(getattr(opening, "leaves", 1) or 1))
+        door_color = ARMOR if armored else CHARCOAL
+        c.setStrokeColorRGB(*door_color)
+        c.setLineWidth(1.8 if armored else 1.2)
+
+        if sliding:
+            offset = 6.5
+            c.line(a[0] + snx * offset, a[1] + sny * offset, b[0] + snx * offset, b[1] + sny * offset)
+            slide_to = getattr(opening, "slideTo", None) or "b"
+            sign = -1 if slide_to == "a" else 1
+            x0 = center[0] - sux * 9 * sign
+            y0 = center[1] - suy * 9 * sign
+            x1 = center[0] + sux * 9 * sign
+            y1 = center[1] + suy * 9 * sign
+            c.setLineWidth(0.9)
+            _draw_pdf_arrow(c, x0, y0, x1, y1)
+        elif leaves >= 2:
+            side = -1 if getattr(opening, "swingSide", None) == -1 else 1
+            mid = center
+            for hinge, closed in ((a, mid), (b, mid)):
+                ldx, ldy = closed[0] - hinge[0], closed[1] - hinge[1]
+                radius = math.hypot(ldx, ldy) or 1.0
+                open_tip = (
+                    hinge[0] + (-ldy / radius) * radius * side,
+                    hinge[1] + (ldx / radius) * radius * side,
+                )
+                c.setStrokeColorRGB(*door_color)
+                c.setLineWidth(1.8 if armored else 1.2)
+                c.line(hinge[0], hinge[1], open_tip[0], open_tip[1])
+                start_angle = math.degrees(math.atan2(ldy, ldx))
+                c.setStrokeColorRGB(0.58, 0.64, 0.72)
+                c.setLineWidth(0.65)
+                c.arc(
+                    hinge[0] - radius, hinge[1] - radius,
+                    hinge[0] + radius, hinge[1] + radius,
+                    start_angle, 90 * side,
+                )
+        else:
+            hinge_at_a = getattr(opening, "hingeEnd", None) != "b"
+            hinge = a if hinge_at_a else b
+            closed = b if hinge_at_a else a
+            ldx, ldy = closed[0] - hinge[0], closed[1] - hinge[1]
+            radius = math.hypot(ldx, ldy) or 1.0
+            side = -1 if getattr(opening, "swingSide", None) == -1 else 1
+            open_tip = (
+                hinge[0] + (-ldy / radius) * radius * side,
+                hinge[1] + (ldx / radius) * radius * side,
+            )
+            c.setStrokeColorRGB(*door_color)
+            c.setLineWidth(1.8 if armored else 1.2)
+            c.line(hinge[0], hinge[1], open_tip[0], open_tip[1])
+            start_angle = math.degrees(math.atan2(ldy, ldx))
+            c.setStrokeColorRGB(0.58, 0.64, 0.72)
+            c.setLineWidth(0.65)
+            c.arc(
+                hinge[0] - radius, hinge[1] - radius,
+                hinge[0] + radius, hinge[1] + radius,
+                start_angle, 90 * side,
+            )
+
+        if armored:
+            c.setFillColorRGB(*ARMOR)
+            c.setFont("Helvetica-Bold", 6.5)
+            c.drawCentredString(center[0] - snx * 9, center[1] - sny * 9 - 2, "B")
     else:
-        offset = 2.2
-        c.line(a[0] + nx * offset, a[1] + ny * offset, b[0] + nx * offset, b[1] + ny * offset)
-        c.line(a[0] - nx * offset, a[1] - ny * offset, b[0] - nx * offset, b[1] - ny * offset)
+        kind = getattr(opening, "windowKind", None) or "single"
+        sliding = bool(getattr(opening, "sliding", False) or kind == "sliding")
+        balcony = bool(getattr(opening, "balconyDoor", False) or kind in {"balcony", "balcony-double"})
+        leaves = max(1, int(getattr(opening, "leaves", 1) or 1))
+        win_color = GREEN if balcony else CYAN
+        c.setStrokeColorRGB(*win_color)
+        c.setLineWidth(1.0)
+
+        if sliding:
+            shrink = line_len * 0.18
+            c.line(a[0] + snx * 2.3, a[1] + sny * 2.3, b[0] - sux * shrink + snx * 2.3, b[1] - suy * shrink + sny * 2.3)
+            c.line(a[0] + sux * shrink - snx * 2.3, a[1] + suy * shrink - sny * 2.3, b[0] - snx * 2.3, b[1] - sny * 2.3)
+            c.setLineWidth(0.65)
+            _draw_pdf_arrow(c, center[0], center[1], center[0] + sux * 9, center[1] + suy * 9)
+            _draw_pdf_arrow(c, center[0], center[1], center[0] - sux * 9, center[1] - suy * 9)
+        else:
+            offset = 2.2
+            c.line(a[0] + snx * offset, a[1] + sny * offset, b[0] + snx * offset, b[1] + sny * offset)
+            c.line(a[0] - snx * offset, a[1] - sny * offset, b[0] - snx * offset, b[1] - sny * offset)
+            for index in range(1, leaves):
+                ratio = index / leaves
+                mx = a[0] + dx * ratio
+                my = a[1] + dy * ratio
+                c.setLineWidth(0.7)
+                c.line(mx + snx * 4, my + sny * 4, mx - snx * 4, my - sny * 4)
+
+        if balcony:
+            c.setFillColorRGB(*GREEN)
+            c.setFont("Helvetica-Bold", 6)
+            c.drawCentredString(center[0] - snx * 9, center[1] - sny * 9 - 2, "PF")
+
 
 
 def _draw_scale_bar(c, x: float, y: float, scale: float) -> None:
@@ -534,6 +666,85 @@ def _draw_north(c, x: float, y: float, angle_deg: float) -> None:
     c.setFont("Helvetica-Bold", 8)
     c.drawCentredString(0, 22, "N")
     c.restoreState()
+
+
+def _wall_construction_style(wall):
+    state = str(getattr(wall, "constructionState", "existing") or "existing")
+    if state == "demolish":
+        return RED, [8, 5], "DEMOLIRE"
+    if state == "new":
+        return GREEN, [], "NUOVO"
+    if state == "close-opening":
+        return ORANGE, [2, 3], "CHIUSURA"
+    if state == "new-opening":
+        return PURPLE, [1, 5], "APERTURA"
+    return BLUE, [], "ESISTENTE"
+
+
+def _draw_construction_wall(c, pt, wall, scale: float) -> None:
+    color, dash, _ = _wall_construction_style(wall)
+    a = pt(wall.start.x, wall.start.y)
+    b = pt(wall.end.x, wall.end.y)
+    c.setStrokeColorRGB(*color)
+    c.setLineWidth(max(2.0, min(8.0, wall.thicknessMm * scale)))
+    c.setDash(dash)
+    c.line(*a, *b)
+    c.setDash()
+
+    state = str(getattr(wall, "constructionState", "existing") or "existing")
+    dx, dy = b[0] - a[0], b[1] - a[1]
+    length = math.hypot(dx, dy) or 1.0
+    ux, uy = dx / length, dy / length
+    nx, ny = -uy, ux
+
+    if state == "demolish":
+        c.setStrokeColorRGB(*RED)
+        c.setLineWidth(0.9)
+        step = max(22.0, min(40.0, length / 4))
+        d = step / 2
+        while d < length:
+            x, y = a[0] + ux * d, a[1] + uy * d
+            c.line(x - ux * 4 - nx * 4, y - uy * 4 - ny * 4, x + ux * 4 + nx * 4, y + uy * 4 + ny * 4)
+            c.line(x - ux * 4 + nx * 4, y - uy * 4 + ny * 4, x + ux * 4 - nx * 4, y + uy * 4 - ny * 4)
+            d += step
+    elif state == "close-opening":
+        c.setStrokeColorRGB(*ORANGE)
+        c.setLineWidth(0.75)
+        d = 12.0
+        while d < length:
+            x, y = a[0] + ux * d, a[1] + uy * d
+            c.line(x - nx * 4, y - ny * 4, x + nx * 4, y + ny * 4)
+            d += 18.0
+
+
+def _draw_construction_legend(c, x: float, y: float, model: PlanModel) -> float:
+    states = []
+    for wall in model.walls:
+        state = str(getattr(wall, "constructionState", "existing") or "existing")
+        if state != "existing" and state not in states:
+            states.append(state)
+    if not states:
+        return y
+
+    c.setFillColorRGB(*MUTED)
+    c.setFont("Helvetica-Bold", 6.5)
+    c.drawString(x, y, "INTERVENTI")
+    cursor = x + 52
+    for state in states:
+        sample = next((w for w in model.walls if str(getattr(w, "constructionState", "existing")) == state), None)
+        if sample is None:
+            continue
+        color, dash, label = _wall_construction_style(sample)
+        c.setStrokeColorRGB(*color)
+        c.setLineWidth(2)
+        c.setDash(dash)
+        c.line(cursor, y - 1, cursor + 18, y - 1)
+        c.setDash()
+        c.setFillColorRGB(*CHARCOAL)
+        c.setFont("Helvetica-Bold", 6.3)
+        c.drawString(cursor + 22, y - 3, label)
+        cursor += 22 + max(42, stringWidth(label, "Helvetica-Bold", 6.3) + 13)
+    return y - 12
 
 
 def _draw_plan_page(c, model: PlanModel) -> None:
@@ -585,11 +796,9 @@ def _draw_plan_page(c, model: PlanModel) -> None:
         path.close()
         c.drawPath(path, stroke=0, fill=1)
 
-    c.setStrokeColorRGB(*BLUE)
     c.setLineCap(0)
     for wall in model.walls:
-        c.setLineWidth(max(2.0, min(8.0, wall.thicknessMm * scale)))
-        c.line(*pt(wall.start.x, wall.start.y), *pt(wall.end.x, wall.end.y))
+        _draw_construction_wall(c, pt, wall, scale)
 
     for opening in model.openings:
         wall = wall_map.get(opening.wallId)
@@ -621,7 +830,9 @@ def _draw_plan_page(c, model: PlanModel) -> None:
         estimated_on_page = _dimension_wall(c, pt, wall, scale, center_xy) or estimated_on_page
 
     # Legend and scale.
-    legend_y = 88
+    legend_y = 100
+    legend_y = _draw_construction_legend(c, mx, legend_y, model)
+    legend_y = min(88, legend_y)
     c.setFillColorRGB(*CHARCOAL)
     c.setFont("Helvetica", 7.5)
     c.drawString(mx, legend_y, "Misura rilevata")
@@ -916,7 +1127,7 @@ def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: flo
         c.setFillColorRGB(*CHARCOAL)
         c.setFont("Helvetica", 7.8)
         for opening in room.openings[:4]:
-            kind = "Porta" if opening.type == "door" else "Finestra"
+            kind = _opening_type_label(opening)
             text = f"{kind} - {_m(opening.widthMm, 2)} x {_m(opening.heightMm, 2)}"
             c.drawString(x + 16, yy, text)
             yy -= 13
