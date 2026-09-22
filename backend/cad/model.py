@@ -19,7 +19,10 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
         within=bool(meta.get("withinTolerance",True))
         source=meta.get("lengthSource","MEASURED" if wall.measured else "SKETCH")
         quality="NEEDS_REVIEW" if not within else {"MEASURED":"OK","CALCULATED":"CALCULATED","SUSPECT_MEASURED":"NEEDS_REVIEW"}.get(source,"ESTIMATED")
-        walls.append(WallModel(id=wall.id,startNodeId=wall.start_node,endNodeId=wall.end_node,start=PointMM(x=_clean(a[0]),y=_clean(a[1])),end=PointMM(x=_clean(b[0]),y=_clean(b[1])),declaredLengthMm=wall.length_mm if wall.measured else round(calc,1),calculatedLengthMm=calc,sourceLengthCm=wall.source_length_cm,heightMm=wall.height_mm,thicknessMm=wall.thickness_mm,sourceStroke={"strokeId":wall.raw.get("strokeId"),"a":{"x":wall.sketch_a[0],"y":wall.sketch_a[1]},"b":{"x":wall.sketch_b[0],"y":wall.sketch_b[1]}},quality=quality,orientation=meta.get("orientation","free"),measured=wall.measured,lengthErrorMm=round(abs(calc-wall.length_mm),3),toleranceMm=round(float(meta.get("toleranceMm",0.0)),3),withinTolerance=within,suspect=bool(meta.get("suspect")),suggestedLengthMm=meta.get("suggestedLengthMm"),lengthSource=source,resolvedBy=meta.get("resolvedBy"),usedLengthMm=meta.get("usedLengthMm")))
+        construction_state=wall.raw.get("constructionState") if wall.raw.get("constructionState") in {"existing","demolish","new","close-opening","new-opening"} else "existing"
+        construction_thickness_cm=wall.raw.get("constructionThicknessCm")
+        construction_thickness_mm=(float(construction_thickness_cm)*10.0) if construction_thickness_cm not in (None,"") else None
+        walls.append(WallModel(id=wall.id,startNodeId=wall.start_node,endNodeId=wall.end_node,start=PointMM(x=_clean(a[0]),y=_clean(a[1])),end=PointMM(x=_clean(b[0]),y=_clean(b[1])),declaredLengthMm=wall.length_mm if wall.measured else round(calc,1),calculatedLengthMm=calc,sourceLengthCm=wall.source_length_cm,heightMm=wall.height_mm,thicknessMm=wall.thickness_mm,sourceStroke={"strokeId":wall.raw.get("strokeId"),"a":{"x":wall.sketch_a[0],"y":wall.sketch_a[1]},"b":{"x":wall.sketch_b[0],"y":wall.sketch_b[1]}},quality=quality,orientation=meta.get("orientation","free"),measured=wall.measured,lengthErrorMm=round(abs(calc-wall.length_mm),3),toleranceMm=round(float(meta.get("toleranceMm",0.0)),3),withinTolerance=within,suspect=bool(meta.get("suspect")),suggestedLengthMm=meta.get("suggestedLengthMm"),lengthSource=source,resolvedBy=meta.get("resolvedBy"),usedLengthMm=meta.get("usedLengthMm"),constructionState=construction_state,constructionThicknessMm=construction_thickness_mm))
     openings=[]
     for raw in plan.openings:
         wall=wall_map.get(raw.get("wallId"))
@@ -46,7 +49,19 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
         if raw.get("sillHeightMm") is not None: sill,ssrc=float(raw["sillHeightMm"]),"USER_MM"
         elif raw.get("sillHeightCm") is not None: sill,ssrc=float(raw["sillHeightCm"])*10,"USER_CM"
         else: sill,ssrc=(0.0 if raw.get("type")=="door" else 900.0),"DEFAULT"
-        openings.append(OpeningModel(id=str(raw.get("id")),type=raw.get("type","door"),wallId=wall.id,widthMm=width_mm,heightMm=height_mm,offsetMm=offset_mm,referenceEnd=reference,sillHeightMm=sill,centerFromStartMm=center_from_a,center=PointMM(x=_clean(cx),y=_clean(cy)),heightSource=hsrc,sillHeightSource=ssrc))
+        opening_type=raw.get("type","door")
+        door_kind=raw.get("doorKind") if raw.get("doorKind") in {"internal","double","sliding","armored","armored-double"} else ("internal" if opening_type=="door" else None)
+        window_kind=raw.get("windowKind") if raw.get("windowKind") in {"single","double","triple","sliding","balcony","balcony-double"} else ("single" if opening_type=="window" else None)
+        leaves_raw=raw.get("leaves")
+        leaves=int(leaves_raw) if isinstance(leaves_raw,(int,float)) and int(leaves_raw)>0 else (2 if door_kind in {"double","armored-double"} or window_kind in {"double","sliding","balcony-double"} else (3 if window_kind=="triple" else 1))
+        armored=bool(raw.get("armored") or door_kind in {"armored","armored-double"})
+        sliding=bool(raw.get("sliding") or door_kind=="sliding" or window_kind=="sliding")
+        balcony=bool(raw.get("balconyDoor") or window_kind in {"balcony","balcony-double"})
+        hinge_end=raw.get("hingeEnd") if raw.get("hingeEnd") in {"a","b"} else None
+        swing_direction=raw.get("swingDirection") if raw.get("swingDirection") in {"inward","outward"} else None
+        swing_side=-1 if raw.get("swingSide")==-1 else (1 if raw.get("swingSide")==1 else None)
+        slide_to=raw.get("slideTo") if raw.get("slideTo") in {"a","b"} else None
+        openings.append(OpeningModel(id=str(raw.get("id")),type=opening_type,wallId=wall.id,widthMm=width_mm,heightMm=height_mm,offsetMm=offset_mm,referenceEnd=reference,sillHeightMm=sill,centerFromStartMm=center_from_a,center=PointMM(x=_clean(cx),y=_clean(cy)),heightSource=hsrc,sillHeightSource=ssrc,doorKind=door_kind,windowKind=window_kind,category=raw.get("category"),leaves=leaves,sliding=sliding,armored=armored,balconyDoor=balcony,hingeEnd=hinge_end,swingDirection=swing_direction,swingSide=swing_side,slideTo=slide_to))
     rooms=detect_rooms(plan,solved,openings,bath_tiling_height_mm=bath_tiling_height_mm,room_hints=room_hints)
     uncertainty={}
     if uncertainty_samples>0 and rooms:
