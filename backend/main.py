@@ -81,6 +81,15 @@ if control_dir.is_dir():
     app.mount("/control", StaticFiles(directory=control_dir, html=True), name="control")
 
 
+@app.on_event("startup")
+def sync_local_documents_archive_on_startup():
+    try:
+        rows = archive.sync_all()
+        logger.info("GE360 Documents archive synchronized: %s plans", len(rows))
+    except Exception as exc:
+        logger.warning("GE360 Documents archive startup sync failed: %s", exc)
+
+
 @app.get("/", include_in_schema=False)
 def backend_home():
     return RedirectResponse(url="/control/", status_code=307)
@@ -385,7 +394,7 @@ def control_documents_archive_sync():
     return {"ok": True, "root": str(settings.documents_dir), "count": len(rows), "plans": rows}
 
 
-@app.get("/api/v1/control/config-backups", dependencies=[Depends(require_api_key)])
+@app.get("/api/v1/control/config-backups", dependencies=[Depends(require_setup_access)])
 def control_config_backups():
     root = settings.config_backup_dir
     rows = []
