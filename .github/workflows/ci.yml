@@ -17,6 +17,7 @@ jobs:
       - run: pip install -r requirements-dev.txt
       - run: python -m compileall -q backend
       - run: node --check control/control.js
+      - run: python scripts/verify-control-assets.py .
       - run: pytest -q
       - run: bash scripts/smoke-http.sh
       - name: Cross backend/frontend jsdom E2E
@@ -38,6 +39,7 @@ jobs:
           done
           GE360_E2E_BASE_URL=http://127.0.0.1:18888/api/v1 GE360_E2E_API_KEY="$GE360_API_KEY" node frontend-e2e/scripts/test-live-backend.mjs
       - run: bash -n scripts/install-debian.sh
+      - run: bash -n scripts/update-debian.sh
       - run: bash -n scripts/setup-tailscale.sh
       - run: bash -n scripts/install-direct-bridge.sh
       - run: bash -n scripts/direct-bridge-firewall.sh
