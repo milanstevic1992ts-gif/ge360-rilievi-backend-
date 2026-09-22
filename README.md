@@ -189,6 +189,14 @@ sudo systemctl enable --now ge360-rilievi-backend.service
 sudo systemctl status ge360-rilievi-backend.service
 ```
 
+La directory di produzione `/opt/ge360/ge360-rilievi-backend` è una copia di deploy e non un checkout Git. Dopo la prima installazione, gli aggiornamenti dalla `main` si eseguono con:
+
+```bash
+sudo ge360-rilievi-update
+```
+
+L'updater scarica una snapshot coerente della repository, verifica che HTML/CSS/JS di Control appartengano allo stesso build, preserva `.env`, `.venv` e i dati persistenti e, se rileva GE360 Direct Bridge già installato, ne riapplica automaticamente permessi e integrazione systemd.
+
 Il template systemd usa `User=jarvis`, bind `127.0.0.1:9888` e storage `/opt/ge360/data/rilievi`. Se l'host usa un altro utente, adattare l'unit prima dell'avvio.
 
 ## Docker
