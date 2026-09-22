@@ -22,14 +22,20 @@ from backend.view3d import to_plan3d
 
 
 class Pipeline:
-    def __init__(self, settings: Settings, storage: PlanStorage, db: Database):
+    def __init__(self, settings: Settings, storage: PlanStorage, db: Database, archive=None):
         self.settings = settings
         self.storage = storage
         self.db = db
+        self.archive = archive
 
     def save_raw(self, payload: PlanPayload) -> dict:
         if not payload.planId:
             payload = payload.model_copy(update={"planId": uuid.uuid4().hex})
+        previous = None
+        try:
+            previous = self.storage.raw_payload(payload.planId)
+        except (OSError, ValueError, json.JSONDecodeError):
+            pass
         data = payload.model_dump(mode="json")
         path = self.storage.save_raw(payload.planId, data)
         self.db.upsert_raw(payload.planId, payload.name, self.storage.plan_dir(payload.planId))
@@ -41,6 +47,13 @@ class Pipeline:
                 "path": str(path),
             },
         )
+        if self.archive is not None:
+            try:
+                detail = self.archive.summarize_raw_change(previous, data)
+                self.archive.record_event(payload.planId, "RILIEVO AGGIORNATO", detail)
+                self.archive.sync_plan(payload.planId)
+            except Exception as exc:
+                self.storage.append_log(payload.planId, {"event": "document_archive_error", "error": str(exc)})
         return {"success": True, "planId": payload.planId, "status": PlanStatus.RAW.value}
 
     def process(self, plan_id: str, raw_override: dict | None = None) -> dict:
@@ -313,6 +326,16 @@ class Pipeline:
                     "version": version,
                 },
             )
+            if self.archive is not None:
+                try:
+                    self.archive.record_event(
+                        plan_id,
+                        "PDF / VERSIONE CREATA",
+                        f"versione V{version:03d} · stato {status.value}",
+                    )
+                    self.archive.sync_plan(plan_id)
+                except Exception as exc:
+                    self.storage.append_log(plan_id, {"event": "document_archive_error", "error": str(exc)})
             return self.process_response(plan_id, model, version, status, agent_log)
         except Exception as exc:
             completed_at = datetime.now(timezone.utc).isoformat()
@@ -336,6 +359,12 @@ class Pipeline:
                     "processingTimeMs": round((time.perf_counter() - started) * 1000, 2),
                 },
             )
+            if self.archive is not None:
+                try:
+                    self.archive.record_event(plan_id, "ERRORE ELABORAZIONE", f"versione V{version:03d} · {exc}")
+                    self.archive.sync_plan(plan_id)
+                except Exception:
+                    pass
             raise
 
     def _error_model(self):
