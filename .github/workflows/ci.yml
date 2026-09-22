@@ -42,6 +42,8 @@ jobs:
       - run: bash -n scripts/install-direct-bridge.sh
       - run: bash -n scripts/direct-bridge-firewall.sh
       - run: bash -n scripts/preflight.sh
+      - run: bash -n scripts/ge360-config-backup.sh
+      - run: bash -n scripts/ge360-config-restore.sh
       - name: Firewall policy guard
         run: |
           grep -Fq 'iifname \"lo\" tcp dport' scripts/direct-bridge-firewall.sh
