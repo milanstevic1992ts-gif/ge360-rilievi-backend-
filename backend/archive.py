@@ -171,6 +171,39 @@ class PlanDocumentArchive:
             changed.append("dati generali modificati")
         return ", ".join(changed) if changed else "nessuna differenza dati"
 
+    @staticmethod
+    def _bootstrap_human_log(folder: Path, processing_log: Path) -> None:
+        target = folder / "LOG.txt"
+        if target.exists() or not processing_log.is_file():
+            return
+        labels = {
+            "raw_saved": "RILIEVO SALVATO",
+            "processing_started": "ELABORAZIONE AVVIATA",
+            "processing_completed": "PDF / VERSIONE CREATA",
+            "processing_error": "ERRORE ELABORAZIONE",
+            "error_model_updated": "MODELLO ERRORI AGGIORNATO",
+            "error_model_unavailable": "MODELLO ERRORI NON DISPONIBILE",
+            "document_archive_error": "ERRORE ARCHIVIO DOCUMENTI",
+        }
+        lines = []
+        for raw_line in processing_log.read_text(encoding="utf-8", errors="replace").splitlines():
+            try:
+                row = json.loads(raw_line)
+            except json.JSONDecodeError:
+                continue
+            event = str(row.get("event") or "evento")
+            label = labels.get(event, event.replace("_", " ").upper())
+            detail = []
+            if row.get("version") is not None:
+                detail.append(f"versione V{int(row['version']):03d}")
+            if row.get("processingTimeMs") is not None:
+                detail.append(f"{row['processingTimeMs']} ms")
+            if row.get("error"):
+                detail.append(str(row["error"]))
+            lines.append(f"[{row.get('ts') or ''}] {label}" + (f" — {' · '.join(detail)}" if detail else ""))
+        if lines:
+            target.write_text("\n".join(lines) + "\n", encoding="utf-8")
+
     def sync_plan(self, plan_id: str) -> dict:
         folder = self.folder_for(plan_id)
         source = self.storage.plan_dir(plan_id)
@@ -236,6 +269,7 @@ class PlanDocumentArchive:
 
         processing_log = source / "logs" / "processing.jsonl"
         self._copy_if_changed(processing_log, folder / "Log_tecnico.jsonl")
+        self._bootstrap_human_log(folder, processing_log)
 
         row = self._row(plan_id)
         manifest = {
