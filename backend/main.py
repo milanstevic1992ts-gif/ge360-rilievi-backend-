@@ -246,7 +246,7 @@ def health():
         "version": "1.5.0",
         "aiEnabled": settings.ai_enabled,
         "apiKeyRequired": bool(read_runtime_api_key(settings)) or settings.require_api_key,
-        "setupUrl": "/setup/",
+        "setupUrl": "/control/?view=settings",
     }
 
 
