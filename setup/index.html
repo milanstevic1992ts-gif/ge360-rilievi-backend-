@@ -1,161 +1,23 @@
 <!doctype html>
 <html lang="it">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1">
-<title>GE360 · Accesso remoto</title>
-<style>
-body{margin:0;background:#0b1220;color:#e5e7eb;font-family:system-ui,sans-serif}.wrap{max-width:820px;margin:auto;padding:24px}.card{background:#111827;border:1px solid #273244;border-radius:18px;padding:18px;margin:14px 0}.row{display:flex;gap:10px;flex-wrap:wrap}.pill{padding:6px 10px;border-radius:999px;background:#1f2937}.ok{color:#86efac}.bad{color:#fca5a5}.warn{color:#fde68a}button{border:0;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer}button.primary{background:#2563eb;color:white}button.secondary{background:#374151;color:white}button.danger{background:#7f1d1d;color:white}input,textarea{box-sizing:border-box;width:100%;background:#020617;color:#e5e7eb;border:1px solid #334155;border-radius:10px;padding:11px;font:inherit}code{word-break:break-all}.small{font-size:13px;color:#94a3b8}.hidden{display:none}.device{padding:12px 0;border-top:1px solid #273244}.qr{background:white;padding:10px;border-radius:12px;max-width:320px;width:100%;box-sizing:border-box}
-</style>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="theme-color" content="#0b1120">
+  <title>GE360 · Impostazioni</title>
+  <meta http-equiv="refresh" content="0;url=/control/?view=settings&bootstrap=1">
+  <style>
+    html,body{margin:0;min-height:100%;background:#0b1120;color:#e5e7eb;font-family:Inter,system-ui,sans-serif}
+    body{min-height:100vh;display:grid;place-items:center}.card{width:min(430px,88vw);padding:24px;border:1px solid #273244;border-radius:20px;background:#111827}
+    h1{margin:0 0 8px;font-size:20px}p{color:#94a3b8;font-size:13px;line-height:1.5}a{color:#93c5fd;font-weight:800}
+  </style>
 </head>
-<body><div class="wrap">
-<h1>GE360 · Accesso remoto</h1>
-<p class="small">WireGuard fa il tunnel. GE360 gestisce configurazione, dispositivi, QR e diagnostica. Il backend resta sulla porta 9888.</p>
-
-<div class="card">
-<h2>GE360 DIRECT BRIDGE</h2>
-<div id="bridgeState">Controllo…</div>
-<p id="bridgeMessage" class="small"></p>
-<div class="row">
-<button class="secondary" id="bridgeRefresh">AGGIORNA</button>
-<button class="secondary" id="bridgeRestart">RIAVVIA WG</button>
-</div>
-<p class="small">Prima installazione sul server:</p>
-<textarea readonly rows="2">sudo bash scripts/install-direct-bridge.sh</textarea>
-</div>
-
-<div class="card">
-<h2>Collega dispositivo</h2>
-<label>Nome dispositivo</label>
-<input id="deviceName" placeholder="Telefono Milan">
-<div style="margin-top:10px"><button class="primary" id="pair">+ COLLEGA DISPOSITIVO</button></div>
-<div id="pairing" class="hidden">
-<p class="warn"><strong>QR GE360 mostrato una sola volta.</strong> Contiene tunnel WireGuard + chiave applicativa del dispositivo. Il server salva solo l'hash della chiave applicativa e non salva la private key WireGuard del telefono.</p>
-<img id="qr" class="qr" alt="QR GE360 Direct Bridge">
-<label>Backend GE360</label><input id="bridgeBackend" readonly>
-<label style="display:block;margin-top:10px">Configurazione WireGuard</label>
-<textarea id="wgConfig" readonly rows="10"></textarea>
-</div>
-</div>
-
-<div class="card">
-<h2>Dispositivi</h2>
-<div id="devices">Nessun dispositivo.</div>
-</div>
-
-<div class="card">
-<h2>Master API key GE360</h2>
-<p class="small">Chiave amministrativa separata. Il QR dei dispositivi usa una chiave applicativa dedicata e revocabile, non questa master key.</p>
-<button class="primary" id="generate">GENERA / RUOTA API KEY</button>
-<div id="keyBox" class="hidden">
-<textarea id="apiKey" readonly rows="3"></textarea>
-<button class="secondary" data-copy="apiKey">COPIA API KEY</button>
-</div>
-</div>
-
-<div class="card">
-<h2>Configurazione · Reinstallazione e ripristino</h2>
-<p class="small">Questa è la strada verificata sul server GE360. Usala dopo una reinstallazione Linux, un aggiornamento importante o se Direct Bridge smette di funzionare.</p>
-
-<div class="row">
-<span class="pill">Backend TCP 9888</span>
-<span class="pill">WireGuard UDP 51820</span>
-<span class="pill">wg0 · 10.88.0.1/24</span>
-</div>
-
-<p class="small"><strong>1. Ripristino automatico GE360</strong></p>
-<textarea readonly rows="2">sudo bash /opt/ge360/ge360-rilievi-backend/scripts/recover-linux-install.sh</textarea>
-
-<p class="small"><strong>2. Reinstallazione Direct Bridge</strong></p>
-<textarea readonly rows="3">sudo GE360_SERVICE_USER=ge360 \
-bash /opt/ge360/ge360-rilievi-backend/scripts/install-direct-bridge.sh</textarea>
-
-<p class="small"><strong>3. Verifica IPv6 pubblico</strong></p>
-<textarea readonly rows="2">ip -6 addr show scope global</textarea>
-<p class="small">Se la connessione IPv4 è sotto CGNAT, impostare in <code>/etc/ge360/direct-bridge/bridge.env</code> l'IPv6 pubblico stabile come <code>GE360_PUBLIC_HOST</code> e lasciare <code>GE360_BRIDGE_AUTO_PORT_MAPPING=false</code>.</p>
-
-<p class="small"><strong>4. Riavvio completo</strong></p>
-<textarea readonly rows="4">sudo systemctl restart ge360-direct-bridge-firewall
-sudo systemctl restart wg-quick@wg0
-sudo systemctl restart ge360-rilievi-backend
-ge360-rilievi-status</textarea>
-
-<p class="small"><strong>5. Backup da conservare prima di reinstallare</strong></p>
-<textarea readonly rows="5">sudo tar -czf ~/ge360-backup-$(date +%Y%m%d).tar.gz \
-/etc/ge360-rilievi-backend \
-/etc/ge360/direct-bridge \
-/opt/ge360/data/rilievi \
-/var/lib/ge360/direct-bridge</textarea>
-
-<p class="warn"><strong>Importante:</strong> non esporre TCP 9888 sul router. Il frontend remoto entra tramite WireGuard UDP 51820 e raggiunge il backend su <code>http://10.88.0.1:9888</code>.</p>
-
-<details>
-<summary>Compatibilità CPU server JARVIS</summary>
-<p class="small">Per evitare SIGILL / Illegal instruction sul vecchio AMD Phenom II, il backend usa NumPy &lt; 2.4 e SciPy &lt; 1.17. Questa regola è già salvata nel pacchetto/repository.</p>
-</details>
-</div>
-
-<details class="card">
-<summary>Collegamento Tailscale precedente (opzionale)</summary>
-<div id="tailscaleState" class="small" style="margin-top:12px">Controllo…</div>
-</details>
-
-<div id="message" class="small"></div>
-</div>
-<script>
-const $=id=>document.getElementById(id);
-let profile=null;
-async function jsonOrError(r){const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error((d.detail&&d.detail.message)||d.detail||('HTTP '+r.status));return d}
-async function refreshSetup(){
-  try{
-    const r=await fetch('/api/v1/setup/status'); if(!r.ok)return;
-    profile=await r.json();
-    const t=profile.tailscale||{};
-    $('tailscaleState').innerHTML=(t.installed?'Installato':'Non installato')+' · '+(t.running?'connesso':'non connesso')+' · '+(t.serveConfigured?'Serve attivo':'Serve inattivo');
-  }catch(e){}
-}
-async function refreshBridge(){
-  $('message').textContent='';
-  try{
-    const d=await jsonOrError(await fetch('/api/v1/bridge/status'));
-    const online=d.state_code==='ONLINE';
-    $('bridgeState').innerHTML='<span class="pill '+(online?'ok':'bad')+'">'+d.state_code+'</span> <span class="pill">'+d.interface+'</span> <span class="pill">'+d.server_ip+':'+d.backend_port+'</span> <span class="pill">'+d.device_count+' dispositivi</span>';
-    $('bridgeMessage').textContent=(d.public_endpoint?'Endpoint: '+d.public_endpoint+'. ':'')+(d.message||'');
-    $('bridgeBackend').value=d.backend_url||'http://10.88.0.1:9888';
-  }catch(e){
-    $('bridgeState').innerHTML='<span class="pill bad">BRIDGE NON CONFIGURATO</span>';
-    $('bridgeMessage').textContent=e.message;
-  }
-  await refreshDevices();
-}
-async function refreshDevices(){
-  try{
-    const rows=await jsonOrError(await fetch('/api/v1/bridge/devices'));
-    if(!rows.length){$('devices').textContent='Nessun dispositivo.';return}
-    $('devices').innerHTML=rows.map(d=>'<div class="device"><strong>'+escapeHtml(d.name)+'</strong> · <code>'+d.vpn_ip+'</code> · '+d.status+(d.last_handshake_at?' · handshake '+d.last_handshake_at:'')+(d.status==='ACTIVE'?'<div style="margin-top:8px"><button class="danger" onclick="revokeDevice(\''+d.device_id+'\')">REVOCA</button></div>':'')+'</div>').join('');
-  }catch(e){$('devices').textContent='Dispositivi non disponibili: '+e.message}
-}
-function escapeHtml(v){return String(v).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[c]))}
-async function revokeDevice(id){
-  if(!confirm('Revocare questo dispositivo?'))return;
-  try{await jsonOrError(await fetch('/api/v1/bridge/devices/'+id+'/revoke',{method:'POST'}));await refreshBridge()}catch(e){$('message').textContent=e.message}
-}
-$('pair').onclick=async()=>{
-  const name=$('deviceName').value.trim(); if(!name){$('message').textContent='Inserisci un nome dispositivo.';return}
-  try{
-    const d=await jsonOrError(await fetch('/api/v1/bridge/devices',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({name})}));
-    $('qr').src='data:image/png;base64,'+d.pairing.qr_png_base64;
-    $('wgConfig').value=d.pairing.wireguard_config;
-    $('bridgeBackend').value=d.pairing.backend_url;
-    $('pairing').classList.remove('hidden');
-    await refreshBridge();
-  }catch(e){$('message').textContent=e.message}
-};
-$('bridgeRefresh').onclick=refreshBridge;
-$('bridgeRestart').onclick=async()=>{try{await jsonOrError(await fetch('/api/v1/bridge/restart',{method:'POST'}));await refreshBridge()}catch(e){$('message').textContent=e.message}};
-$('generate').onclick=async()=>{
-  try{const d=await jsonOrError(await fetch('/api/v1/setup/api-key',{method:'POST'}));$('apiKey').value=d.apiKey;$('keyBox').classList.remove('hidden')}catch(e){$('message').textContent=e.message}
-};
-document.querySelectorAll('[data-copy]').forEach(b=>b.onclick=async()=>{await navigator.clipboard.writeText($(b.dataset.copy).value);b.textContent='COPIATO ✓'});
-refreshSetup();refreshBridge();
-</script></body></html>
+<body>
+  <section class="card">
+    <h1>GE360 · Impostazioni</h1>
+    <p>La configurazione è ora integrata nella dashboard Control.</p>
+    <p><a href="/control/?view=settings&bootstrap=1">Apri Control → Impostazioni</a></p>
+  </section>
+  <script>location.replace('/control/?view=settings&bootstrap=1');</script>
+</body>
+</html>
