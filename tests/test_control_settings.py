@@ -37,3 +37,19 @@ def test_control_settings_keep_linux_recovery_commands_visible():
     assert "install-direct-bridge.sh" in html
     assert "ge360-rilievi-status" in html
     assert "non esporre TCP 9888" in html
+
+
+def test_documents_view_contains_local_archive_and_backup_status():
+    html = (ROOT / "control" / "index.html").read_text(encoding="utf-8")
+    js = (ROOT / "control" / "control.js").read_text(encoding="utf-8")
+
+    assert 'id="documentsArchiveGrid"' in html
+    assert 'id="syncDocumentsArchiveBtn"' in html
+    assert 'id="configBackupDetails"' in html
+    assert 'id="configRestoreCommand"' in html
+
+    assert "/control/documents-archive" in js
+    assert "/control/config-backups" in js
+    assert "renderDocumentsArchive" in js
+    assert "renderConfigBackups" in js
+    assert "sudo ge360-config-restore latest" in js
