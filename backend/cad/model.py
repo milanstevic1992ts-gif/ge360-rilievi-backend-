@@ -91,6 +91,7 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
     document_meta = {key: value for key, value in document_meta.items() if value not in (None, "")}
 
     return PlanModel(
+        technicalSchema=str(plan.raw_payload.get("technicalSchema") or "ge360-technical-plan-v1"),
         planId=plan.plan_id,
         name=plan.name,
         nodes=nodes,
@@ -103,6 +104,7 @@ def build_cad_model(plan:NormalizedPlan,solved:SolverResult,*,bath_tiling_height
         needsReview=needs_review,
         metadata={
             "sourceVersion": plan.raw_payload.get("version", 4),
+            "technicalSchema": plan.raw_payload.get("technicalSchema") or "ge360-technical-plan-v1",
             "scaleMmPerSketchUnit": plan.scale_mm_per_unit,
             "mergedEndpointMaxGapMm": max(plan.merged_gaps_mm, default=0.0),
             "solverOperations": solved.operations,
