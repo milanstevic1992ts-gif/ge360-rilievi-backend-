@@ -25,9 +25,6 @@ class Settings:
     api_key: str
     data_dir: Path
     db_path: Path
-    documents_dir: Path
-    config_backup_dir: Path
-    config_backup_keep: int
     host: str
     port: int
     default_wall_thickness_mm: float
@@ -56,6 +53,9 @@ class Settings:
     require_api_key: bool = True
     mc_samples: int = 40                 # simulazioni Monte Carlo per gli intervalli dei m²
     learn_errors: bool = True            # il modello degli errori impara dai rilievi reali
+    documents_dir: Path = Path("/opt/ge360/Documenti/Rilievi")
+    config_backup_dir: Path = Path("/opt/ge360/Backup/Configurazione")
+    config_backup_keep: int = 10
 
 
 def get_settings() -> Settings:
