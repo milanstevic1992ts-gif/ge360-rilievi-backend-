@@ -253,6 +253,7 @@ class Pipeline:
             completed_at = datetime.now(timezone.utc).isoformat()
             manifest = {
                 "planId": plan_id,
+                "technicalSchema": model.technicalSchema,
                 "version": version,
                 "status": status.value,
                 "createdAt": created_at,
