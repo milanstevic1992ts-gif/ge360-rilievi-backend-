@@ -27,7 +27,18 @@ id "$SERVICE_USER" >/dev/null 2>&1 || { echo "Service user $SERVICE_USER not fou
 REQUIRED_PACKAGES=(wireguard-tools nftables miniupnpc curl acl)
 MISSING_PACKAGES=()
 for package in "${REQUIRED_PACKAGES[@]}"; do
-  if ! dpkg-query -W -f='${Status}' "$package" 2>/dev/null | grep -q '^install ok installedusermod -a -G "$GROUP_NAME" "$SERVICE_USER"
+  if ! dpkg-query -W "$package" >/dev/null 2>&1; then
+    MISSING_PACKAGES+=("$package")
+  fi
+done
+if (( ${#MISSING_PACKAGES[@]} )); then
+  apt-get update
+  DEBIAN_FRONTEND=noninteractive apt-get install -y "${MISSING_PACKAGES[@]}"
+fi
+command -v setfacl >/dev/null 2>&1 || { echo "setfacl not found after installing acl"; exit 1; }
+
+getent group "$GROUP_NAME" >/dev/null || groupadd --system "$GROUP_NAME"
+usermod -a -G "$GROUP_NAME" "$SERVICE_USER"
 
 install -d -m 0750 -o root -g "$GROUP_NAME" "$CONFIG_DIR"
 install -d -m 0750 -o root -g "$GROUP_NAME" "$APPS_DIR"
