@@ -409,6 +409,7 @@ class Pipeline:
         return {
             "success": status != PlanStatus.ERROR,
             "planId": plan_id,
+            "technicalSchema": model.technicalSchema,
             "status": status.value,
             "version": version,
             "needsReview": model.needsReview,
