@@ -1,0 +1,13 @@
+[Unit]
+Description=GE360 daily configuration backup
+After=local-fs.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/ge360-config-backup
+User=root
+Group=root
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+ReadWritePaths=/opt/ge360/Backup/Configurazione /run/lock
