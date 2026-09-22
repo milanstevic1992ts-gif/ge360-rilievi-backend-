@@ -843,10 +843,9 @@ def _draw_plan_page(c, model: PlanModel) -> None:
     c.drawString(mx + 95, legend_y, "Misura stimata/calcolata*")
     c.setStrokeColorRGB(*ORANGE)
     c.line(mx + 95, legend_y - 5, mx + 119, legend_y - 5)
-    c.setFillColorRGB(*CHARCOAL)
-    c.setFont("Helvetica", 7.5)
-    c.drawString(mx + 245, legend_y, "Porta")
-    c.drawString(mx + 290, legend_y, "Finestra")
+    c.setFillColorRGB(*MUTED)
+    c.setFont("Helvetica", 6.8)
+    c.drawString(mx + 245, legend_y, "B = blindata · PF = portafinestra")
 
     _draw_scale_bar(c, mx, 61, scale)
 
@@ -1126,8 +1125,10 @@ def _draw_room_card(c, model: PlanModel, room, number: int, x: float, y_top: flo
         yy -= 14
         c.setFillColorRGB(*CHARCOAL)
         c.setFont("Helvetica", 7.8)
+        technical_openings = {item.id: item for item in model.openings}
         for opening in room.openings[:4]:
-            kind = _opening_type_label(opening)
+            technical = technical_openings.get(opening.id, opening)
+            kind = _opening_type_label(technical)
             text = f"{kind} - {_m(opening.widthMm, 2)} x {_m(opening.heightMm, 2)}"
             c.drawString(x + 16, yy, text)
             yy -= 13
