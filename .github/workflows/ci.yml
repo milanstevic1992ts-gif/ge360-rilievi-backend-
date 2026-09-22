@@ -16,6 +16,7 @@ jobs:
           node-version: '24'
       - run: pip install -r requirements-dev.txt
       - run: python -m compileall -q backend
+      - run: node --check control/control.js
       - run: pytest -q
       - run: bash scripts/smoke-http.sh
       - name: Cross backend/frontend jsdom E2E
