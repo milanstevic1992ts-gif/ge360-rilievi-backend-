@@ -1,0 +1,11 @@
+[Unit]
+Description=GE360 daily configuration backup schedule
+
+[Timer]
+OnCalendar=*-*-* 03:15:00
+Persistent=true
+RandomizedDelaySec=10m
+Unit=ge360-config-backup.service
+
+[Install]
+WantedBy=timers.target
