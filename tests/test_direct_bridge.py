@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import base64
 import ipaddress
+import json
+from dataclasses import replace
 from pathlib import Path
 
 import pytest
@@ -88,6 +90,34 @@ def test_configured_hostname_is_rejected_when_router_reports_cgnat(tmp_path: Pat
     endpoint = resolve_public_endpoint(s, runner)
     assert endpoint.available is False
     assert endpoint.state_code == "REMOTE_ACCESS_UNAVAILABLE_CGNAT"
+
+
+def test_auto_detected_global_ipv6_wins_over_cgnat_ipv4(tmp_path: Path, monkeypatch):
+    from backend.bridge import network as network_module
+
+    s = replace(settings(tmp_path), public_host=None)
+    monkeypatch.setattr(
+        network_module.shutil,
+        "which",
+        lambda name: "/usr/bin/upnpc" if name == "upnpc" else ("/usr/sbin/ip" if name == "ip" else None),
+    )
+
+    def runner(args, input_text, timeout):
+        if args[:2] == ["/usr/bin/upnpc", "-s"]:
+            return 0, "ExternalIPAddress = 100.64.12.9", ""
+        if args[:4] == ["/usr/sbin/ip", "-j", "-6", "addr"]:
+            payload = [{
+                "ifname": "eth0",
+                "addr_info": [{"family": "inet6", "local": "2001:4860:4860::8888", "scope": "global"}],
+            }]
+            return 0, json.dumps(payload), ""
+        raise AssertionError(args)
+
+    endpoint = resolve_public_endpoint(s, runner)
+    assert endpoint.available is True
+    assert endpoint.state_code == "PUBLIC_IPV6_DETECTED"
+    assert endpoint.source == "ipv6"
+    assert endpoint.endpoint == "[2001:4860:4860::8888]:51820"
 
 
 def test_parse_wg_dump():
