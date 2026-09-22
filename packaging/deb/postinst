@@ -116,6 +116,13 @@ find "$APP_DIR" -type d -exec chmod g+rx {} + 2>/dev/null || true
 find "$APP_DIR" -type f -exec chmod g+r {} + 2>/dev/null || true
 find "$APP_DIR/.venv/bin" -type f -exec chmod g+rx {} + 2>/dev/null || true
 
+# Add archive write access even when an older /etc systemd unit overrides the packaged unit.
+install -d -m 0755 /etc/systemd/system/ge360-rilievi-backend.service.d || true
+cat > /etc/systemd/system/ge360-rilievi-backend.service.d/20-documents-archive.conf <<EOF
+[Service]
+ReadWritePaths=$DOCUMENTS_DIR
+EOF
+
 if command -v systemctl >/dev/null 2>&1; then
   systemctl daemon-reload || true
   systemctl enable "$SERVICE" >/dev/null 2>&1 || true
