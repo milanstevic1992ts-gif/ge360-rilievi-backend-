@@ -3,7 +3,9 @@ set -euo pipefail
 
 BACKUP_DIR="${GE360_CONFIG_BACKUP_DIR:-/opt/ge360/Backup/Configurazione}"
 KEEP="${GE360_CONFIG_BACKUP_KEEP:-10}"
-DB_PATH="${GE360_DB_PATH:-/opt/ge360/data/rilievi/ge360-rilievi.sqlite3}"
+DATA_DIR="${GE360_DATA_DIR:-/opt/ge360/data/rilievi}"
+DB_PATH="${GE360_DB_PATH:-$DATA_DIR/ge360-rilievi.sqlite3}"
+API_KEY_FILE="${GE360_API_KEY_FILE:-$DATA_DIR/.api-key}"
 DATE_UTC="$(date -u +%F)"
 OUT="$BACKUP_DIR/ge360-config-$DATE_UTC.tar.gz"
 LOCK=/run/lock/ge360-config-backup.lock
@@ -37,8 +39,8 @@ copy_path /etc/systemd/system/ge360-direct-bridge-firewall.service
 copy_path /etc/systemd/system/ge360-boot-verify.service
 copy_path /etc/systemd/system/ge360-config-backup.service
 copy_path /etc/systemd/system/ge360-config-backup.timer
-copy_path /opt/ge360/data/rilievi/.api-key
-copy_path /opt/ge360/data/rilievi/error-model.json
+copy_path "$API_KEY_FILE"
+copy_path "$DATA_DIR/error-model.json"
 
 # SQLite backup API gives a transaction-consistent snapshot while GE360 is running.
 if [[ -f "$DB_PATH" ]]; then
