@@ -9,6 +9,7 @@ from .room import RoomModel
 from .constraint import ConstraintModel
 
 class GE360Plan(BaseModel):
+    technicalSchema: Literal["ge360-technical-plan-v1"] = "ge360-technical-plan-v1"
     planId: str
     name: str
     units: Literal["mm"] = "mm"
