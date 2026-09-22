@@ -20,6 +20,8 @@ class FrontendWall(BaseModel):
     thicknessMm: float | None = None
     heightMm: float | None = None
     strokeId: str | None = None
+    constructionState: Literal["existing", "demolish", "new", "close-opening", "new-opening"] = "existing"
+    constructionThicknessCm: float | None = None
 
     @field_validator("lengthCm")
     @classmethod
@@ -27,6 +29,22 @@ class FrontendWall(BaseModel):
         if value is not None and value <= 0:
             raise ValueError("lengthCm must be > 0")
         return value
+
+    @field_validator("constructionThicknessCm")
+    @classmethod
+    def positive_construction_thickness(cls, value: float | None) -> float | None:
+        if value is not None and value <= 0:
+            raise ValueError("constructionThicknessCm must be > 0")
+        return value
+
+    @model_validator(mode="after")
+    def construction_contract(self):
+        if self.constructionState in {"demolish", "new"}:
+            if self.constructionThicknessCm is None and self.thicknessMm is not None:
+                self.constructionThicknessCm = self.thicknessMm / 10.0
+            if self.constructionThicknessCm is None:
+                raise ValueError("constructionThicknessCm is required for demolish/new walls")
+        return self
 
 
 class FrontendOpening(BaseModel):
@@ -42,6 +60,57 @@ class FrontendOpening(BaseModel):
     sillHeightMm: float | None = None
     offsetCm: float | None = None
     referenceEnd: Literal["a", "b"] = "a"
+    doorKind: Literal["internal", "double", "sliding", "armored", "armored-double"] | None = None
+    windowKind: Literal["single", "double", "triple", "sliding", "balcony", "balcony-double"] | None = None
+    category: Literal["interior", "armored"] | None = None
+    leaves: int = Field(default=1, ge=1, le=3)
+    sliding: bool = False
+    armored: bool = False
+    balconyDoor: bool = False
+    hingeEnd: Literal["a", "b"] | None = None
+    swingDirection: Literal["inward", "outward"] | None = None
+    swingSide: Literal[-1, 1] | None = None
+    slideTo: Literal["a", "b"] | None = None
+
+    @model_validator(mode="after")
+    def technical_opening_contract(self):
+        if self.type == "door":
+            if self.windowKind is not None:
+                raise ValueError("windowKind is not valid for a door")
+            kind = self.doorKind or ("armored" if self.armored else "internal")
+            self.doorKind = kind
+            self.armored = kind in {"armored", "armored-double"}
+            self.sliding = kind == "sliding"
+            self.leaves = 2 if kind in {"double", "armored-double"} else 1
+            self.category = "armored" if self.armored else "interior"
+            if self.sliding:
+                self.hingeEnd = None
+                self.swingDirection = None
+                self.swingSide = None
+                self.slideTo = self.slideTo or "b"
+            else:
+                self.slideTo = None
+                self.hingeEnd = self.hingeEnd or "a"
+                self.swingDirection = self.swingDirection or "inward"
+                self.swingSide = self.swingSide or 1
+        else:
+            if self.doorKind is not None:
+                raise ValueError("doorKind is not valid for a window")
+            kind = self.windowKind or "single"
+            self.windowKind = kind
+            self.sliding = kind == "sliding"
+            self.balconyDoor = kind in {"balcony", "balcony-double"}
+            self.leaves = 3 if kind == "triple" else (2 if kind in {"double", "sliding", "balcony-double"} else 1)
+            self.armored = False
+            self.category = None
+            self.hingeEnd = None
+            self.swingDirection = None
+            self.swingSide = None
+            self.slideTo = None
+            if self.balconyDoor:
+                self.sillHeightCm = 0.0
+                self.sillHeightMm = 0.0
+        return self
 
 
 class FrontendRoom(BaseModel):
@@ -81,6 +150,7 @@ class PlanPayload(BaseModel):
     model_config = ConfigDict(extra="allow")
     version: int = 4
     kind: str = "ge360-rough-survey"
+    technicalSchema: Literal["ge360-technical-plan-v1"] = "ge360-technical-plan-v1"
     planId: str | None = Field(default=None, pattern=PLAN_ID_PATTERN)
     name: str = Field(default="Rilievo", max_length=200)
     updatedAt: str | None = None
@@ -97,6 +167,7 @@ class PlanPayload(BaseModel):
     # axis            = tutte le pareti disegnate in asse
     wallReference: Literal["interior", "partitionAxis", "axis"] = "interior"
     surfaces: dict[str, Any] | None = None
+    construction: dict[str, Any] | None = None
     summary: dict[str, Any] = Field(default_factory=dict)
 
     @model_validator(mode="after")
