@@ -19,10 +19,12 @@ def test_daily_backup_script_keeps_only_ten(tmp_path: Path):
     con.close()
 
     backup_dir.mkdir()
+    old_names = set()
     for day in range(1, 13):
         p = backup_dir / f"ge360-config-2026-08-{day:02d}.tar.gz"
         p.write_bytes(b"old")
         os.utime(p, (day, day))
+        old_names.add(p.name)
 
     env = os.environ.copy()
     env.update({
@@ -34,7 +36,7 @@ def test_daily_backup_script_keeps_only_ten(tmp_path: Path):
 
     backups = sorted(backup_dir.glob("ge360-config-*.tar.gz"))
     assert len(backups) == 10
-    assert any("2026-09-" in p.name for p in backups)
+    assert any(p.name not in old_names for p in backups)
 
     newest = max(backups, key=lambda p: p.stat().st_mtime)
     listing = subprocess.check_output(["tar", "-tzf", str(newest)], text=True)
