@@ -4,6 +4,7 @@ After=local-fs.target
 
 [Service]
 Type=oneshot
+EnvironmentFile=-/etc/ge360-rilievi-backend/ge360.env
 ExecStart=/usr/local/sbin/ge360-config-backup
 User=root
 Group=root
