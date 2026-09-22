@@ -78,6 +78,7 @@ else
 fi
 systemctl daemon-reload
 systemctl enable --now ge360-config-backup.timer
+systemctl start ge360-config-backup.service || true
 
 echo "Install complete. Review $APP_DIR/.env, then run:"
 echo "  sudo systemctl enable --now $SERVICE_NAME"
