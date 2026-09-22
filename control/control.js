@@ -1,5 +1,5 @@
 const CONTROL_BUILD='1.5.3';
-const $=s=>document.querySelector(s), $=s=>Array.from(document.querySelectorAll(s));
+const $=s=>document.querySelector(s), $$=s=>Array.from(document.querySelectorAll(s));
 const state={key:localStorage.getItem('ge360ControlKey')||'',summary:null,plans:[],jobs:[],catalog:[],system:null,setupProfile:null,bridgeSettings:null,bridgeDevices:[],documentsArchive:null,configBackups:null,settingsLoaded:false,activePlan:null,activeProcessed:null,activePhotos:[],activeVersions:[],tab:'overview',blobs:new Map()};
 function headers(){return state.key?{'X-GE360-API-Key':state.key}:{}} function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function fmt(v,d=1){return Number.isFinite(Number(v))?Number(v).toLocaleString('it-IT',{minimumFractionDigits:d,maximumFractionDigits:d}):'—'}
