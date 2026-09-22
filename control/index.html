@@ -21,6 +21,7 @@
       <button class="nav-item" data-view="catalog"><span>☷</span>Catalogo lavori</button>
       <button class="nav-item" data-view="documents"><span>▤</span>Documenti</button>
       <button class="nav-item" data-view="system"><span>◉</span>Sistema</button>
+      <button class="nav-item" data-view="settings"><span>⚙</span>Impostazioni</button>
     </nav>
     <div class="sidebar-foot">
       <div id="sideBackend" class="mini-status"><i></i><span>Backend</span><b>—</b></div>
@@ -87,6 +88,115 @@
     <section id="view-system" class="view">
       <div id="systemGrid" class="system-grid"></div>
     </section>
+
+    <section id="view-settings" class="view">
+      <div class="settings-layout">
+        <section class="panel settings-hero">
+          <div class="panel-head">
+            <div>
+              <span class="eyebrow">CONFIGURAZIONE</span>
+              <h2>Impostazioni GE360</h2>
+              <p class="settings-lead">Backend, accesso remoto, dispositivi e chiavi in un solo posto.</p>
+            </div>
+            <button id="settingsRefreshBtn" class="small-btn">AGGIORNA</button>
+          </div>
+          <div id="settingsHealth" class="settings-health"></div>
+        </section>
+
+        <div class="settings-grid">
+          <section class="settings-card">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">DIRECT BRIDGE</span><h3>Connessione remota</h3></div>
+              <span id="bridgeSettingsBadge" class="settings-badge">—</span>
+            </div>
+            <div id="bridgeSettingsDetails" class="settings-kv"></div>
+            <div class="settings-actions">
+              <button id="bridgeSettingsRefreshBtn" class="small-btn">AGGIORNA</button>
+              <button id="bridgeSettingsDiagnosticsBtn" class="small-btn">DIAGNOSTICA</button>
+              <button id="bridgeSettingsRestartBtn" class="danger-outline">RIAVVIA WG</button>
+            </div>
+            <pre id="bridgeDiagnosticsOutput" class="settings-code hidden"></pre>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">APP / TELEFONO</span><h3>Collega dispositivo</h3></div>
+            </div>
+            <label class="settings-label" for="settingsDeviceName">Nome dispositivo</label>
+            <input id="settingsDeviceName" class="settings-input" placeholder="Telefono Milan">
+            <button id="settingsPairBtn" class="primary-btn settings-full">+ COLLEGA DISPOSITIVO</button>
+            <div id="settingsPairing" class="pairing-box hidden">
+              <div class="settings-warning"><strong>QR mostrato una sola volta.</strong> Contiene configurazione WireGuard e chiave applicativa del dispositivo.</div>
+              <img id="settingsPairQr" class="settings-qr" alt="QR GE360 Direct Bridge">
+              <label class="settings-label">Backend GE360</label>
+              <div class="copy-row"><input id="settingsBridgeBackend" class="settings-input" readonly><button class="small-btn" data-settings-copy="settingsBridgeBackend">COPIA</button></div>
+              <label class="settings-label">Configurazione WireGuard</label>
+              <textarea id="settingsWgConfig" class="settings-textarea" readonly rows="9"></textarea>
+              <button class="small-btn" data-settings-copy="settingsWgConfig">COPIA CONFIG</button>
+            </div>
+          </section>
+
+          <section class="settings-card settings-span-2">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">DISPOSITIVI</span><h3>Accessi autorizzati</h3></div>
+              <span id="settingsDeviceCount" class="counter">0</span>
+            </div>
+            <div id="settingsDevices" class="settings-device-list"><div class="muted">Caricamento…</div></div>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">SICUREZZA</span><h3>Master API key</h3></div>
+            </div>
+            <p class="settings-copy">La master key è amministrativa. I dispositivi Direct Bridge usano chiavi dedicate e revocabili.</p>
+            <button id="settingsRotateKeyBtn" class="danger-outline settings-full">GENERA / RUOTA API KEY</button>
+            <div id="settingsKeyBox" class="pairing-box hidden">
+              <div class="settings-warning">La nuova chiave viene mostrata una sola volta. Control la userà automaticamente da questo momento.</div>
+              <textarea id="settingsNewApiKey" class="settings-textarea" readonly rows="3"></textarea>
+              <button class="small-btn" data-settings-copy="settingsNewApiKey">COPIA API KEY</button>
+            </div>
+          </section>
+
+          <section class="settings-card">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">RETE</span><h3>Profilo connessione</h3></div>
+            </div>
+            <div id="settingsConnectionProfile" class="settings-kv"></div>
+            <details class="settings-details">
+              <summary>Tailscale precedente</summary>
+              <div id="settingsTailscale" class="settings-copy">—</div>
+            </details>
+          </section>
+
+          <section class="settings-card settings-span-2">
+            <div class="settings-card-head">
+              <div><span class="eyebrow">LINUX</span><h3>Ripristino e manutenzione</h3></div>
+            </div>
+            <div class="recovery-grid">
+              <div>
+                <b>Ripristino automatico GE360</b>
+                <div class="command-row"><code>sudo bash /opt/ge360/ge360-rilievi-backend/scripts/recover-linux-install.sh</code><button class="small-btn" data-copy-command> COPIA </button></div>
+              </div>
+              <div>
+                <b>Reinstallazione Direct Bridge</b>
+                <div class="command-row"><code>sudo GE360_SERVICE_USER=ge360 bash /opt/ge360/ge360-rilievi-backend/scripts/install-direct-bridge.sh</code><button class="small-btn" data-copy-command>COPIA</button></div>
+              </div>
+              <div>
+                <b>Verifica IPv6 pubblico</b>
+                <div class="command-row"><code>ip -6 addr show scope global</code><button class="small-btn" data-copy-command>COPIA</button></div>
+              </div>
+              <div>
+                <b>Stato servizi GE360</b>
+                <div class="command-row"><code>ge360-rilievi-status</code><button class="small-btn" data-copy-command>COPIA</button></div>
+              </div>
+            </div>
+            <div class="settings-danger-note"><strong>Sicurezza:</strong> non esporre TCP 9888 sul router. Il frontend remoto deve entrare tramite WireGuard e raggiungere il backend sulla rete privata GE360.</div>
+          </section>
+        </div>
+
+        <div id="settingsMessage" class="settings-message hidden"></div>
+      </div>
+    </section>
   </main>
 </div>
 
@@ -97,6 +207,7 @@
     <p>Inserisci la chiave API del backend. Rimane soltanto nella sessione di questo browser.</p>
     <input id="apiKeyInput" type="password" autocomplete="off" placeholder="X-GE360-API-Key">
     <button id="connectBtn">COLLEGA</button>
+    <button id="localSetupBtn" class="auth-secondary" type="button">CONFIGURAZIONE LOCALE</button>
     <div id="authError" class="auth-error"></div>
   </section>
 </div>
