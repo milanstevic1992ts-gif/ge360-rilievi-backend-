@@ -68,6 +68,12 @@ install -m 0755 "$APP_DIR/scripts/ge360-config-restore.sh" /usr/local/sbin/ge360
 install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.service" /etc/systemd/system/ge360-config-backup.service
 install -m 0644 "$APP_DIR/packaging/deb/ge360-config-backup.timer" /etc/systemd/system/ge360-config-backup.timer
 
+mkdir -p /etc/systemd/system/$SERVICE_NAME.d
+cat > /etc/systemd/system/$SERVICE_NAME.d/20-documents-archive.conf <<EOF
+[Service]
+ReadWritePaths=$DOCUMENTS_DIR
+EOF
+
 TARGET_SERVICE="/etc/systemd/system/$SERVICE_NAME"
 if [[ -e "$TARGET_SERVICE" ]]; then
   echo "Existing $TARGET_SERVICE preserved. Review deploy/$SERVICE_NAME manually if an update is needed."
