@@ -19,6 +19,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y dpkg-dev rsync
           bash -n scripts/build-deb.sh
+          bash -n scripts/update-debian.sh
+          python3 scripts/verify-control-assets.py .
           bash -n packaging/deb/preinst
           bash -n packaging/deb/postinst
           bash -n scripts/ge360-rilievi-status
