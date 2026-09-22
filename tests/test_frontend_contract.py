@@ -52,6 +52,7 @@ def test_real_openplan3d_v4_payload_roundtrip(tmp_path: Path, monkeypatch):
     assert status.status_code == 200
     body = status.json()
     assert body["status"] == "PROCESSED"
+    assert body["technicalSchema"] == "ge360-technical-plan-v1"
     assert body["summary"] == {"rooms": 1, "floorAreaM2": 6.0}
     assert body["files"]["glb"] is None
 
@@ -66,6 +67,8 @@ def test_real_openplan3d_v4_payload_roundtrip(tmp_path: Path, monkeypatch):
         f"/api/v1/plans/{payload['planId']}/processed",
         headers=headers,
     ).json()
+    assert processed["technicalSchema"] == "ge360-technical-plan-v1"
+    assert processed["metadata"]["technicalSchema"] == "ge360-technical-plan-v1"
     lengths = {wall["id"]: wall["declaredLengthMm"] for wall in processed["walls"]}
     assert lengths == {"w1": 2000.0, "w2": 3000.0, "w3": 2000.0, "w4": 3000.0}
 
